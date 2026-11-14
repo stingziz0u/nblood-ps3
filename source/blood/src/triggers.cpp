@@ -21,7 +21,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 //-------------------------------------------------------------------------
 #include <random>
+#ifndef __PPU__   // (unused) PS3: its static ios_base::Init brings libstdc++'s locales
 #include <iostream>
+#endif
 
 #include "build.h"
 #include "compat.h"

@@ -1317,7 +1317,13 @@ void nnExtInitModernStuff(bool bSaveLoad) {
     if (gGameOptions.nGameType == kGameTypeSinglePlayer)
     {
         i = kMaxRandomizeRetries;
+#ifdef __PPU__
+        // PS3: no random device (libstdc++'s throws, and without exceptions
+        // that's an abort): the clock
+        gStdRandom.seed((unsigned)timerGetNanoTicks());
+#else
         gStdRandom.seed(std::random_device()());
+#endif
 
         // since true random is not working if compiled with old mingw versions, we should
         // check if it works in game and if not - switch to using in-game random function.

@@ -160,6 +160,16 @@ PS3_LogInit(void)
 	}
 }
 
+/* The log from before main(): the C++ static initializers run first, and
+   one of them dying left no log at all (NBlood-PS3 patch 1). With
+   logs.txt, "[-1]" says the program started; "[0]" that main() came. */
+__attribute__((constructor(101))) static void
+LogEarly(void)
+{
+	PS3_LogInit();
+	PS3_Log("[-1] static initialization");
+}
+
 int
 PS3_LogsEnabled(void)
 {
