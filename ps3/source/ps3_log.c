@@ -160,15 +160,35 @@ PS3_LogInit(void)
 	}
 }
 
-/* The log from before main(): the C++ static initializers run first, and
-   one of them dying left no log at all (NBlood-PS3 patch 1). With
-   logs.txt, "[-1]" says the program started; "[0]" that main() came. */
+/* A trace from before main(): the C++ static initializers run first, and
+   one of them dying left no log at all (NBlood-PS3 patch 1). Patch 2 opened
+   the log there and hung (newlib's stdio and lv2 mutexes aren't ready that
+   early): only lv2's own file calls here. With logs.txt, PS3_PROGRAM
+   ".start.log" says the program started; the log's "[0]" that main() came. */
+#ifdef __PPU__
+#include <sys/file.h>
+
 __attribute__((constructor(101))) static void
 LogEarly(void)
 {
-	PS3_LogInit();
-	PS3_Log("[-1] static initialization");
+	static const char text[] = "static initialization started\n";
+	sysFSStat st;
+	s32 fd;
+	u64 written;
+
+	if (sysLv2FsStat(PS3_USRDIR "/logs.txt", &st) != 0)
+	{
+		return;
+	}
+
+	if (sysLv2FsOpen(PS3_USRDIR "/" PS3_PROGRAM ".start.log",
+					 SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, &fd, 0666, NULL, 0) == 0)
+	{
+		sysLv2FsWrite(fd, text, sizeof(text) - 1, &written);
+		sysLv2FsClose(fd);
+	}
 }
+#endif
 
 int
 PS3_LogsEnabled(void)
