@@ -40,6 +40,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "qav.h"
 #include "seq.h"
 #include "sound.h"
+#include "gfx.h"
 #endif
 
 CACHENODE Resource::purgeHead = { NULL, &purgeHead, &purgeHead, 0 };
@@ -855,6 +856,24 @@ void Resource::Read(DICTNODE *n, void *p)
             pSFX->pitchRange = B_LITTLE32(pSFX->pitchRange);
             pSFX->format = B_LITTLE32(pSFX->format);
             pSFX->loopStart = B_LITTLE32(pSFX->loopStart);
+        }
+        else if (!Bstrcmp(n->type, "QFN"))
+        {
+            // the HUD/menu fonts: each glyph's offset into the font's
+            // bitmap data (read as-is it pointed far outside the font)
+            QFONT *pFont = (QFONT*)p;
+            pFont->at6 = B_LITTLE16(pFont->at6);
+            for (int i = 0; i < 256; i++)
+                pFont->at20[i].offset = B_LITTLE32(pFont->at20[i].offset);
+        }
+        else if (!Bstrcmp(n->type, "QBM"))
+        {
+            QBITMAP *pQBM = (QBITMAP*)p;
+            pQBM->at2 = B_LITTLE16(pQBM->at2);
+            pQBM->at4 = B_LITTLE16(pQBM->at4);
+            pQBM->at6 = B_LITTLE16(pQBM->at6);
+            pQBM->at8 = B_LITTLE16(pQBM->at8);
+            pQBM->ata = B_LITTLE16(pQBM->ata);
         }
 #endif
     }

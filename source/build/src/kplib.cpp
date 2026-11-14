@@ -2218,7 +2218,7 @@ void kpgetdim(const char *buf, int32_t leng, int32_t *xsiz, int32_t *ysiz)
     const uint8_t *ubuf = (uint8_t const *)buf;
 
     (*xsiz) = (*ysiz) = 0; if (leng < 16) return;
-    if (B_UNBUF16(&ubuf[0]) == B_LITTLE16(0x5089)) //.PNG
+    if (B_UNBUF16(&ubuf[0]) == B_LITTLE16(0x5089u)) //.PNG
     {
         lptr = (int32_t const *)buf;
         if ((lptr[0] != B_LITTLE32(0x474e5089)) || (lptr[1] != B_LITTLE32(0x0a1a0a0d))) return;
@@ -2302,7 +2302,7 @@ int32_t kprender(const char *buf, int32_t leng, intptr_t frameptr, int32_t bpl,
 
     paleng = 0; bakcol = 0; numhufblocks = zlibcompflags = 0; filtype = -1;
 
-    if (B_UNBUF16(&ubuf[0]) == B_LITTLE16(0x5089)) //.PNG
+    if (B_UNBUF16(&ubuf[0]) == B_LITTLE16(0x5089u)) //.PNG
         return kpngrend(buf,leng,frameptr,bpl,xdim,ydim);
     else if (B_UNBUF16(&ubuf[0]) == B_LITTLE16(0xD8FFu)) //.JPG
         return kpegrend(buf,leng,frameptr,bpl,xdim,ydim);
