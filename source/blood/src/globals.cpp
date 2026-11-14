@@ -62,7 +62,8 @@ void _ThrowError(const char *pzFormat, ...)
     // NOTE: if NDEBUG is defined, this is a no-op (handled in build/include/compat.h)
     debug_break();
 
-#ifdef WM_MSGBOX_WINDOW
+#if defined WM_MSGBOX_WINDOW || defined __PPU__
+    // (PS3: the layer's screen, then the launcher shows it under the list)
     char titlebuf[256];
     Bsprintf(titlebuf, APPNAME " %s", s_buildRev);
     wm_msgbox(titlebuf, "%s(%i): %s\n", _module, _line, buffer);
@@ -89,7 +90,7 @@ void __dassert(const char * pzExpr, const char * pzFile, int nLine)
     // NOTE: if NDEBUG is defined, this is a no-op (handled in build/include/compat.h)
     debug_break();
 
-#ifdef WM_MSGBOX_WINDOW
+#if defined WM_MSGBOX_WINDOW || defined __PPU__
     char titlebuf[256];
     Bsprintf(titlebuf, APPNAME " %s", s_buildRev);
     wm_msgbox(titlebuf, "Assertion failed: %s in file %s at line %i\n", pzExpr, pzFile, nLine);

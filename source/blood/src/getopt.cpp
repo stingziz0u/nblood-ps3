@@ -31,7 +31,12 @@ char const * const *margv;
 const char *OptArgv[16];
 int OptArgc;
 const char *OptFull;
+#ifdef __PPU__
+// PS3: "/" starts a path (/dev_hdd0/...: the launcher's -j), not a switch
+const char *SwitchChars = "-";
+#else
 const char *SwitchChars = "-/";
+#endif
 
 int GetOptions(SWITCH *switches)
 {
