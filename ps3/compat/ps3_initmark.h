@@ -6,5 +6,5 @@
  */
 #ifdef __cplusplus
 extern "C" int PS3_InitMark(const char *file);
-static int ps3_initmark_ __attribute__((unused)) = PS3_InitMark(__FILE__);
+static int ps3_initmark_ __attribute__((unused)) = PS3_InitMark(__BASE_FILE__);   /* the .cpp, not this header */
 #endif

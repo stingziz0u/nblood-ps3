@@ -344,6 +344,12 @@ $(OBJDIR)/glad/glad.o: $(ESRC)/glad/src/glad.c
 
 # NBlood's own warnings, as upstream builds it (not this port's to fix)
 BLOODWARN := -Wno-sign-compare -Wno-maybe-uninitialized -Wno-format-overflow
+# Blood is full of #pragma pack(1) structs: GCC reads and writes their
+# misaligned 8 byte fields with lfd/stfd (a pointer copied through an FP
+# register), and a misaligned FP access is an alignment interrupt lv2
+# leaves unhandled: the thread dies (patch 5: nnextcdud.cpp static
+# initializers, before main). Byte by byte where a field may be misaligned.
+BLOODWARN += -mstrict-align
 
 $(OBJDIR)/blood/%.o: $(ESRC)/blood/src/%.cpp
 	@mkdir -p $(dir $@)
