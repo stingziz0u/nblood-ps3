@@ -114,6 +114,8 @@ CFORCE   := -include $(CURDIR)/compat/ps3_compat.h
 CFLAGS   := -std=gnu11 $(COMMON) $(INCLUDES) $(CFORCE)
 CXXFLAGS := -std=gnu++14 -fno-exceptions -fno-rtti -fno-threadsafe-statics $(CXXFLAGS_INIT)
 CXXFLAGS += $(COMMON) $(INCLUDES) $(CFORCE)
+# the start log: each C++ file says when its static initializers begin
+CXXFLAGS += -include $(CURDIR)/compat/ps3_initmark.h
 
 XMPFLAGS := -DHAVE_ROUND -DLIBXMP_CORE_PLAYER -DLIBXMP_NO_PROWIZARD -DLIBXMP_NO_DEPACKERS
 XMPFLAGS += -DBUILDING_STATIC -I$(ESRC)/libxmp-lite/include/libxmp-lite

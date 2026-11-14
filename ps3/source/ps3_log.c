@@ -95,9 +95,13 @@ LogRoom(size_t len)
  * next PS3_Log() starts on a fresh one. */
 static int midline;
 
+static void StartDone(void);
+
 void
 PS3_LogInit(void)
 {
+	StartDone();
+
 	if (logfp)
 	{
 		return;
@@ -168,13 +172,30 @@ PS3_LogInit(void)
 #ifdef __PPU__
 #include <sys/file.h>
 
+static s32 start_fd = -1;
+
+static void
+StartWrite(const char *a, const char *b)
+{
+	u64 written;
+
+	if (start_fd < 0)
+	{
+		return;
+	}
+
+	sysLv2FsWrite(start_fd, a, strlen(a), &written);
+	if (b)
+	{
+		sysLv2FsWrite(start_fd, b, strlen(b), &written);
+	}
+	sysLv2FsWrite(start_fd, "\n", 1, &written);
+}
+
 __attribute__((constructor(101))) static void
 LogEarly(void)
 {
-	static const char text[] = "static initialization started\n";
 	sysFSStat st;
-	s32 fd;
-	u64 written;
 
 	if (sysLv2FsStat(PS3_USRDIR "/logs.txt", &st) != 0)
 	{
@@ -182,12 +203,37 @@ LogEarly(void)
 	}
 
 	if (sysLv2FsOpen(PS3_USRDIR "/" PS3_PROGRAM ".start.log",
-					 SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, &fd, 0666, NULL, 0) == 0)
+					 SYS_O_WRONLY | SYS_O_CREAT | SYS_O_TRUNC, &start_fd, 0666, NULL, 0) != 0)
 	{
-		sysLv2FsWrite(fd, text, sizeof(text) - 1, &written);
-		sysLv2FsClose(fd);
+		start_fd = -1;
+	}
+
+	StartWrite("static initialization started", NULL);
+}
+
+/* compat/ps3_initmark.h: a C++ file's static initializers begin */
+int
+PS3_InitMark(const char *file)
+{
+	StartWrite("init ", file);
+	return 0;
+}
+
+/* main(): the static initialization is over */
+static void
+StartDone(void)
+{
+	StartWrite("main() reached", NULL);
+
+	if (start_fd >= 0)
+	{
+		sysLv2FsClose(start_fd);
+		start_fd = -1;
 	}
 }
+#else
+int PS3_InitMark(const char *file) { (void)file; return 0; }
+static void StartDone(void) { }
 #endif
 
 int
