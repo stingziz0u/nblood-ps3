@@ -1,0 +1,68 @@
+/*
+ * polymost_vp.vcg -- Polymost's vertex shader (polymost1Vert.glsl) for the
+ * RSX. ps3gl runs it when the game uses its GLSL program (ps3gl_prog.c).
+ *
+ * The RSX's fragment programs keep their constants inside the program
+ * code, so the GLSL uniforms the fragment shader reads come in here, as
+ * vertex program constants, and go to it as interpolated values (the same
+ * for the whole polygon). Changing them is then just a few words in the
+ * command buffer.
+ *
+ *   ATTR0  position (float4), ATTR3 color (4 x u8), ATTR8 texcoord 0
+ *
+ *   m0..m3    rows of projection * modelview * u_rotMatrix
+ *   e2, e3    rows 2 and 3 of modelview * u_rotMatrix (eye z for fog)
+ *   t0, t1    rows 0 and 1 of the texture matrix (unit 0)
+ *   fog       x = fog end, y = 1 / (end - start), z = fog on (u_fogEnabled)
+ *   u1..u7    the fragment shader's uniforms, packed as TEXCOORD1..7
+ *             (see polymost_fp.fcg)
+ */
+
+void main(
+    float4 position : ATTR0,
+    float4 color    : ATTR3,
+    float2 tc0      : ATTR8,
+
+    uniform float4 m0, uniform float4 m1, uniform float4 m2, uniform float4 m3,
+    uniform float4 e2, uniform float4 e3,
+    uniform float4 t0, uniform float4 t1,
+    uniform float4 fog,
+    uniform float4 u1, uniform float4 u2, uniform float4 u3, uniform float4 u4,
+    uniform float4 u5, uniform float4 u6, uniform float4 u7,
+
+    out float4 oPosition : POSITION,
+    out float4 oColor    : COLOR0,
+    out float4 oT0       : TEXCOORD0,
+    out float4 oT1       : TEXCOORD1,
+    out float4 oT2       : TEXCOORD2,
+    out float4 oT3       : TEXCOORD3,
+    out float4 oT4       : TEXCOORD4,
+    out float4 oT5       : TEXCOORD5,
+    out float4 oT6       : TEXCOORD6,
+    out float4 oT7       : TEXCOORD7
+)
+{
+    oPosition = float4(dot(m0, position), dot(m1, position), dot(m2, position), dot(m3, position));
+
+    /* gl_FogFragCoord = abs(eye z / eye w) */
+    float ez = abs(dot(e2, position) / dot(e3, position));
+
+    /* gl_TextureMatrix[0] * gl_MultiTexCoord0, swapped for indexed tiles
+       (u5.z = u_usePalette) */
+    float4 tc = float4(tc0, 0.0, 1.0);
+    float2 st = float2(dot(t0, tc), dot(t1, tc));
+    st = lerp(st, st.yx, u5.z);
+
+    /* linear fog factor; without fog a value that clamps to 1 */
+    float f = lerp(1.0e4, (fog.x - ez) * fog.y, fog.z);
+
+    oColor = color;
+    oT0 = float4(st, position.z, f);   /* z: v_distance (gl_Vertex.z) */
+    oT1 = u1;
+    oT2 = u2;
+    oT3 = u3;
+    oT4 = u4;
+    oT5 = u5;
+    oT6 = u6;
+    oT7 = u7;
+}

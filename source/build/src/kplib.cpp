@@ -1815,7 +1815,9 @@ static int32_t ktgarend(const char *header, int32_t fleng,
             kcoltype  = 0;
             bitdepth  = 8;
             palcol[0] = B_LITTLE32(0xff000000);
-            for (i = 1; i < 256; i++) palcol[i] = palcol[i - 1] + B_LITTLE32(0x10101);
+            // unsigned: byte-swapped on a big-endian CPU (PS3) the sum
+            // overflows a signed int at i == 127, and gcc then may cut the loop
+            for (i = 1; i < 256; i++) palcol[i] = (int32_t)((uint32_t)palcol[i - 1] + (uint32_t)B_LITTLE32(0x10101));
             break;
         case 2:
         case 3: kcoltype = 2; break;

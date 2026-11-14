@@ -863,6 +863,10 @@ void OSD_Init(void)
 
 
 //
+#ifdef __PPU__
+extern "C" int PS3_LogsEnabled(void);   // ps3/source/ps3_log.c
+#endif
+
 // OSD_SetLogFile() -- Sets the text file where printed text should be echoed
 //
 void OSD_SetLogFile(const char *fn)
@@ -870,6 +874,9 @@ void OSD_SetLogFile(const char *fn)
     if (!fn)
         return;
 
+#ifdef __PPU__
+    if (PS3_LogsEnabled())   // PS3: no log file unless USRDIR/logs.txt
+#endif
     loguru::add_file(fn, loguru::Truncate, loguru::Verbosity_INFO);
 
     if (!osd)

@@ -1,0 +1,8 @@
+# build output (make -C ps3)
+/obj/
+/build/
+/*.elf
+/*.self
+/*.pkg
+/pkgfiles/USRDIR/VERSION.TXT
+/pkgfiles/USRDIR/nblood.pk3

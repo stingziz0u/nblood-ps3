@@ -246,11 +246,23 @@ void engineSetupLogging(int &argc, char **argv)
     loguru::init(argc, argv, initopts);
 }
 
+#ifdef __PPU__
+extern "C" int PS3_LogsEnabled(void);   // ps3/source/ps3_log.c: USRDIR/logs.txt
+#endif
+
 void engineSetLogFile(const char* fn, loguru::Verbosity verbosity /*= LOG_ENGINE_MAX*/, loguru::FileMode mode /*= loguru::Truncate*/)
 {
     loguru::g_stderr_verbosity = verbosity;
     loguru::remove_callback(CB_ENGINE);
     loguru::add_callback(CB_ENGINE, engineLogCallback, nullptr, verbosity);
+#ifdef __PPU__
+    // PS3: no log files unless asked for (the console still gets it all)
+    if (!PS3_LogsEnabled())
+    {
+        loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+        return;
+    }
+#endif
     loguru::add_file(fn, mode, verbosity);
 }
 
@@ -883,6 +895,10 @@ void maybe_redirect_outputs(void)
 #endif
 }
 
+#ifdef __PPU__
+extern "C" void PS3_Video_SetLock30(int lock);  // ps3/source/ps3_video.c
+#endif
+
 int engineFPSLimit(bool const throttle)
 {
     static uint64_t lastFrameTicks;
@@ -890,6 +906,20 @@ int engineFPSLimit(bool const throttle)
 
     if (r_maxfps == -2)
         return true;
+
+#ifdef __PPU__
+    // PS3: every frame is flipped on a vblank and the flip queue holds the
+    // game back (ps3_video.c): that is the frame pacing. A timer limiter
+    // on top of it (60.000 Hz against the TV's 59.94) only makes uneven
+    // frames. r_maxfps 30: a flip every second vblank.
+    // 60 (every vblank) or 30: anything else from an old config is 60
+    if (r_maxfps != 30 && r_maxfps != -1)
+        r_maxfps = -1;
+
+    PS3_Video_SetLock30(r_maxfps == 30);
+    (void)throttle;
+    return true;
+#endif
 
     g_frameDelay = calcFrameDelay(!throttle || ((unsigned)(r_maxfps-1) < (unsigned)refreshfreq) ? r_maxfps : -1);
 

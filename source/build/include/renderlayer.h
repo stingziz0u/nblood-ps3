@@ -1,6 +1,8 @@
 
 #ifdef RENDERTYPEWIN
 # include "winlayer.h"
+#elif defined RENDERTYPEPS3
+# include "ps3layer.h"
 #else
 # include "sdlayer.h"
 #endif

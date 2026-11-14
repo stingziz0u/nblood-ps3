@@ -51,6 +51,18 @@ static playbackstatus MV_GetNextXMPBlock(VoiceNode *voice)
     uint32_t const samples = mi.buffer_size / (2 * (16/8)); // since 2-channel, 16-bit is hardcoded
     // uint32_t const samples = mi.buffer_size / (voice->channels * (voice->bits / 8));
 
+#if B_BIG_ENDIAN != 0
+    // libxmp mixes in the CPU's byte order; MultiVoc reads 16 bit samples as
+    // little-endian (CONVERT_LE_SAMPLE_TO_SIGNED), as Vorbis hands them over
+    // (ov_read with bigendianp = 0). Without this, modules play as noise on
+    // a big-endian CPU (PS3).
+    {
+        auto data = (uint16_t *)mi.buffer;
+        for (int i = 0, n = mi.buffer_size / 2; i < n; i++)
+            data[i] = B_LITTLE16(data[i]);
+    }
+#endif
+
     voice->sound    = (char const *)mi.buffer;
     voice->length   = samples << 16;
     voice->position = mi.time;

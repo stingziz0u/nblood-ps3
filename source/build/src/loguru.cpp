@@ -92,6 +92,12 @@
 	#ifndef LOGURU_STACKTRACES
 		#define LOGURU_STACKTRACES 0
 	#endif
+#elif defined(__PPU__)
+	// PS3: no pthreads, no backtrace(); std::recursive_mutex and friends
+	// come from ps3/compat/ps3_threads.h
+	#define LOGURU_PTHREADS    0
+	#define LOGURU_WINTHREADS  0
+	#define LOGURU_STACKTRACES 0
 #else
 	#define LOGURU_PTHREADS    1
 	#define LOGURU_WINTHREADS  0
@@ -1809,7 +1815,7 @@ namespace loguru
 
 	using ECPtr = EcEntryBase*;
 
-#if defined(_WIN32) || (defined(__APPLE__) && !TARGET_OS_IPHONE)
+#if defined(_WIN32) || (defined(__APPLE__) && !TARGET_OS_IPHONE) || defined(__PPU__)
 	#ifdef __APPLE__
 		#define LOGURU_THREAD_LOCAL __thread
 	#else
@@ -2073,19 +2079,27 @@ namespace loguru
 	}
 } // namespace loguru
 
-#ifdef _WIN32
+#if defined _WIN32 || defined __PPU__
+// The PS3's newlib has signal() but no sigaction(): the same plain signal()
+// handlers as on Windows.
 namespace loguru
 {
 #ifdef _MSC_VER
 	_crt_signal_t default_handler[NSIG] = {};
+#elif defined __PPU__
+	_sig_func_ptr default_handler[NSIG] = {};
 #else
 	__p_sig_fn_t default_handler[NSIG] = {};
 #endif
 
 	void write_to_stderr(const char* data, size_t size)
 	{
+#ifdef __PPU__
+		fwrite(data, 1, size, stderr);
+#else
 		HANDLE hOut = GetStdHandle(STD_ERROR_HANDLE);
 		WriteFile(hOut, data, size, nullptr, nullptr);
+#endif
 	}
 
 	void call_default_signal_handler(int signal_number)

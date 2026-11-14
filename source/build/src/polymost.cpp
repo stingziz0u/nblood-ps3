@@ -137,6 +137,11 @@ int32_t gltexfiltermode = TEXFILTER_OFF;
 #ifdef EDUKE32_GLES
 int32_t glusetexcompr = 2;
 int32_t glusetexcache = 0, glusememcache = 0;
+#elif defined __PS3__
+// PS3 (ps3gl): no texture compression, so no texture cache file either
+int32_t glusetexcompr = 0;
+int32_t glusetexcache = 0, glusememcache = 0;
+static int32_t lastglpolygonmode = 0; //FUK
 #else
 int32_t glusetexcompr = 1;
 int32_t glusetexcache = 2, glusememcache = 1;
@@ -980,6 +985,12 @@ void polymost_glinit()
 #if (defined _MSC_VER) || (!defined BITNESS64)
     if (tilesheetSize > 8192)
         tilesheetSize = 8192;
+#endif
+#ifdef __PS3__
+    // ps3gl keeps textures as 32 bits per texel in the RSX's memory:
+    // 2048x2048 sheets (16 MB each) rather than 4096 ones (64 MB)
+    if (tilesheetSize > 2048)
+        tilesheetSize = 2048;
 #endif
 
     tilesheetSizeRecip = 1.f/tilesheetSize;

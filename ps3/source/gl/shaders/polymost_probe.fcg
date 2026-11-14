@@ -1,0 +1,46 @@
+/*
+ * polymost_probe.fcg -- fragment programs for ps3gl's self test
+ * (ps3gl_prog.c, PS3GL_SelfTest): each writes some of what
+ * polymost_vp.vcg hands the fragment shader, so the test can read back
+ * from the render target what the fragment programs actually get.
+ *
+ *   PROBE 1  TEXCOORD1 as it is (MOV)
+ *   PROBE 2  TEXCOORD1 * 0.5 (a MUL reading the input: cgcomp marks
+ *            those "perspective correction off")
+ *   PROBE 3  TEXCOORD0.xy (the interpolated texture coordinate, MOV)
+ *   PROBE 4  TEXCOORD0.xy * 0.5 (MUL)
+ *   PROBE 5  the w of TEXCOORD2, 3, 4, 7
+ *   PROBE 6  the w of TEXCOORD5, 6, the z of TEXCOORD2, 3
+ *
+ * (Probe 7 is Polymost's own debug view 2, polymost_fp.fcg.)
+ */
+
+#ifndef PROBE
+#define PROBE 1
+#endif
+
+float4 main(
+    float4 t0   : TEXCOORD0,
+    float4 tps  : TEXCOORD1,
+    float4 htc  : TEXCOORD2,
+    float4 psw  : TEXCOORD3,
+    float4 sh   : TEXCOORD4,
+    float4 fl   : TEXCOORD5,
+    float4 npot : TEXCOORD6,
+    float4 fogc : TEXCOORD7
+) : COLOR
+{
+#if PROBE == 1
+    return tps;
+#elif PROBE == 2
+    return tps * 0.5;
+#elif PROBE == 3
+    return float4(t0.xy, 0.0, 1.0);
+#elif PROBE == 4
+    return float4(t0.xy * 0.5, 0.0, 1.0);
+#elif PROBE == 5
+    return float4(htc.w, psw.w, sh.w, fogc.w);
+#else
+    return float4(fl.w, npot.w, htc.z, psw.z);
+#endif
+}

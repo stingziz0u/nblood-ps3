@@ -278,8 +278,15 @@ void CONFIG_SetDefaults(void)
     else
 # endif
     {
+#ifdef __PPU__
+        // PS3: the internal resolution, which the RSX scales to the 720p
+        // output (as EDuke32-PS3's)
+        gSetup.xdim = 848;
+        gSetup.ydim = 480;
+#else
         gSetup.xdim = 1024;
         gSetup.ydim = 768;
+#endif
     }
 #endif
 
@@ -750,14 +757,19 @@ int CONFIG_ReadSetup(void)
     SCRIPT_GetNumber(scripthandle, "Setup", "ForceSetup", &gSetup.forcesetup);
     SCRIPT_GetNumber(scripthandle, "Setup", "NoAutoLoad", &gSetup.noautoload);
     SCRIPT_GetNumber(scripthandle, "Setup", "InputJoystick", &gSetup.usejoystick);
+#ifdef __PPU__
+    gSetup.usejoystick = 1;   // the PS3 has nothing else
+#endif
     SCRIPT_GetNumber(scripthandle, "Setup", "UseJoystickRumble", &gSetup.joystickrumble);
     SCRIPT_GetNumber(scripthandle, "Setup", "InputMouse", &gSetup.usemouse);
 
     int32_t cachesize;
     SCRIPT_GetNumber(scripthandle, "Setup", "CacheSize", &cachesize);
 
+#ifndef __PPU__   // PS3: the 48 MB of tile.cpp, whatever the setup says
     if (cachesize > MAXCACHE1DSIZE)
         MAXCACHE1DSIZE = cachesize;
+#endif
 
     if (gNoSetup == 0 && g_modDir[0] == '/')
     {

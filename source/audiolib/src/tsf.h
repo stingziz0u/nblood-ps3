@@ -320,6 +320,17 @@ TSFDEF float tsf_channel_get_tuning(tsf* f, int channel);
 #define TSF_TRUE 1
 #define TSF_FALSE 0
 #define TSF_BOOL char
+
+// TSF_SAMPLES_INT16: keep the font's samples as 16 bit (as the file has
+// them) instead of float, half the memory (PS3: a 30 MB font is 60 MB as
+// floats); converted to float as they are read.
+#ifdef TSF_SAMPLES_INT16
+typedef short tsf_sample;
+#define TSF_SAMPLE_TO_FLOAT(x) ((float)(x) * (1.0f / 32767.0f))
+#else
+typedef float tsf_sample;
+#define TSF_SAMPLE_TO_FLOAT(x) (x)
+#endif
 #define TSF_PI 3.14159265358979323846264338327950288
 #define TSF_NULL 0
 
@@ -340,7 +351,7 @@ typedef char tsf_char20[20];
 struct tsf
 {
 	struct tsf_preset* presets;
-	float* fontSamples;
+	tsf_sample* fontSamples;
 	struct tsf_voice* voices;
 	struct tsf_channels* channels;
 
@@ -405,7 +416,21 @@ struct tsf_hydra
 	int phdrNum, pbagNum, pmodNum, pgenNum, instNum, ibagNum, imodNum, igenNum, shdrNum;
 };
 
+// SoundFont files are little-endian. On a big-endian CPU (PS3) every 16 and
+// 32 bit field is byte-swapped after reading (TSFR below), which leaves the
+// two bytes of a key/velocity range the other way round: hence hi, lo.
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define TSF_BIG_ENDIAN 1
+union tsf_hydra_genamount { struct { tsf_u8 hi, lo; } range; tsf_s16 shortAmount; tsf_u16 wordAmount; };
+static void tsf_swap(void* p, unsigned int size)
+{
+	unsigned char* b = (unsigned char*)p, t;
+	if (size == 2) { t = b[0]; b[0] = b[1]; b[1] = t; }
+	else if (size == 4) { t = b[0]; b[0] = b[3]; b[3] = t; t = b[1]; b[1] = b[2]; b[2] = t; }
+}
+#else
 union tsf_hydra_genamount { struct { tsf_u8 lo, hi; } range; tsf_s16 shortAmount; tsf_u16 wordAmount; };
+#endif
 struct tsf_hydra_phdr { tsf_char20 presetName; tsf_u16 preset, bank, presetBagNdx; tsf_u32 library, genre, morphology; };
 struct tsf_hydra_pbag { tsf_u16 genNdx, modNdx; };
 struct tsf_hydra_pmod { tsf_u16 modSrcOper, modDestOper; tsf_s16 modAmount; tsf_u16 modAmtSrcOper, modTransOper; };
@@ -416,7 +441,11 @@ struct tsf_hydra_imod { tsf_u16 modSrcOper, modDestOper; tsf_s16 modAmount; tsf_
 struct tsf_hydra_igen { tsf_u16 genOper; union tsf_hydra_genamount genAmount; };
 struct tsf_hydra_shdr { tsf_char20 sampleName; tsf_u32 start, end, startLoop, endLoop, sampleRate; tsf_u8 originalPitch; tsf_s8 pitchCorrection; tsf_u16 sampleLink, sampleType; };
 
+#ifdef TSF_BIG_ENDIAN
+#define TSFR(FIELD) stream->read(stream->data, &i->FIELD, sizeof(i->FIELD)); tsf_swap(&i->FIELD, sizeof(i->FIELD));
+#else
 #define TSFR(FIELD) stream->read(stream->data, &i->FIELD, sizeof(i->FIELD));
+#endif
 static void tsf_hydra_read_phdr(struct tsf_hydra_phdr* i, struct tsf_stream* stream) { TSFR(presetName) TSFR(preset) TSFR(bank) TSFR(presetBagNdx) TSFR(library) TSFR(genre) TSFR(morphology) }
 static void tsf_hydra_read_pbag(struct tsf_hydra_pbag* i, struct tsf_stream* stream) { TSFR(genNdx) TSFR(modNdx) }
 static void tsf_hydra_read_pmod(struct tsf_hydra_pmod* i, struct tsf_stream* stream) { TSFR(modSrcOper) TSFR(modDestOper) TSFR(modAmount) TSFR(modAmtSrcOper) TSFR(modTransOper) }
@@ -497,6 +526,9 @@ static TSF_BOOL tsf_riffchunk_read(struct tsf_riffchunk* parent, struct tsf_riff
 	if (parent && sizeof(tsf_fourcc) + sizeof(tsf_u32) > parent->size) return TSF_FALSE;
 	if (!stream->read(stream->data, &chunk->id, sizeof(tsf_fourcc)) || *chunk->id <= ' ' || *chunk->id >= 'z') return TSF_FALSE;
 	if (!stream->read(stream->data, &chunk->size, sizeof(tsf_u32))) return TSF_FALSE;
+	#ifdef TSF_BIG_ENDIAN
+	tsf_swap(&chunk->size, sizeof(tsf_u32));
+	#endif
 	if (parent && sizeof(tsf_fourcc) + sizeof(tsf_u32) + chunk->size > parent->size) return TSF_FALSE;
 	if (parent) parent->size -= sizeof(tsf_fourcc) + sizeof(tsf_u32) + chunk->size;
 	IsRiff = TSF_FourCCEquals(chunk->id, "RIFF"), IsList = TSF_FourCCEquals(chunk->id, "LIST");
@@ -875,7 +907,23 @@ static int tsf_load_presets(tsf* res, struct tsf_hydra *hydra, unsigned int font
 	return 1;
 }
 
-static int tsf_load_samples(float** pFloatBuffer, unsigned int* pSmplCount, struct tsf_riffchunk *chunkSmpl, struct tsf_stream* stream)
+#ifdef TSF_SAMPLES_INT16
+static int tsf_load_samples(tsf_sample** pFloatBuffer, unsigned int* pSmplCount, struct tsf_riffchunk *chunkSmpl, struct tsf_stream* stream)
+{
+	*pSmplCount = chunkSmpl->size / (unsigned int)sizeof(short);
+	*pFloatBuffer = (tsf_sample*)TSF_MALLOC(*pSmplCount * sizeof(short));
+	if (!*pFloatBuffer || !stream->read(stream->data, *pFloatBuffer, *pSmplCount * sizeof(short))) return 0;
+	if (chunkSmpl->size & 1) stream->skip(stream->data, 1);
+	#ifdef TSF_BIG_ENDIAN
+	{
+		unsigned short *p = (unsigned short*)*pFloatBuffer, *end = p + *pSmplCount;
+		for (; p != end; p++) *p = (unsigned short)((*p >> 8) | (*p << 8));
+	}
+	#endif
+	return 1;
+}
+#else
+static int tsf_load_samples(tsf_sample** pFloatBuffer, unsigned int* pSmplCount, struct tsf_riffchunk *chunkSmpl, struct tsf_stream* stream)
 {
 	// Inline convert the samples from short to float
 	float *res, *out; const short *in;
@@ -883,9 +931,17 @@ static int tsf_load_samples(float** pFloatBuffer, unsigned int* pSmplCount, stru
 	*pFloatBuffer = (float*)TSF_MALLOC(*pSmplCount * sizeof(float));
 	if (!*pFloatBuffer || !stream->read(stream->data, *pFloatBuffer, chunkSmpl->size)) return 0;
 	for (res = *pFloatBuffer, out = res + *pSmplCount, in = (short*)res + *pSmplCount; out != res;)
+	{
+	#ifdef TSF_BIG_ENDIAN
+		unsigned short u = (unsigned short)*(--in);
+		*(--out) = (float)((short)((u >> 8) | (u << 8)) / 32767.0);
+	#else
 		*(--out) = (float)(*(--in) / 32767.0);
+	#endif
+	}
 	return 1;
 }
+#endif
 
 static int tsf_voice_envelope_release_samples(struct tsf_voice_envelope* e, float outSampleRate)
 {
@@ -1102,16 +1158,16 @@ static void tsf_voice_calcpitchratio(struct tsf_voice* v, float pitchShift, floa
 	v->pitchOutputFactor = v->region->sample_rate / (tsf_timecents2Secsd(v->region->pitch_keycenter * 100.0) * outSampleRate);
 }
 
-static float tsf_voice_interpolate(float* input, unsigned int *pos, float alpha, enum TSFInterpolateMode interpolatemode)
+static float tsf_voice_interpolate(tsf_sample* input, unsigned int *pos, float alpha, enum TSFInterpolateMode interpolatemode)
 {
 	// Interpolation methods based off https://paulbourke.net/miscellaneous/interpolation/
 	switch (interpolatemode)
 	{
 		case TSF_INTERP_LINEAR:
-			return (input[pos[1]] * (1.f - alpha) + input[pos[2]] * alpha);
+			return (TSF_SAMPLE_TO_FLOAT(input[pos[1]]) * (1.f - alpha) + TSF_SAMPLE_TO_FLOAT(input[pos[2]]) * alpha);
 		case TSF_INTERP_CUBIC:
 		{
-			const float pointa = input[pos[0]], pointb = input[pos[1]], pointc = input[pos[2]], pointd = input[pos[3]];
+			const float pointa = TSF_SAMPLE_TO_FLOAT(input[pos[0]]), pointb = TSF_SAMPLE_TO_FLOAT(input[pos[1]]), pointc = TSF_SAMPLE_TO_FLOAT(input[pos[2]]), pointd = TSF_SAMPLE_TO_FLOAT(input[pos[3]]);
 			float a0, a1, a2, a3, alpha2;
 
 			alpha2 = alpha * alpha;
@@ -1123,14 +1179,14 @@ static float tsf_voice_interpolate(float* input, unsigned int *pos, float alpha,
 		}
 		case TSF_INTERP_NEAREST:
 		default:
-			return input[pos[1]];
+			return TSF_SAMPLE_TO_FLOAT(input[pos[1]]);
 	}
 }
 
 static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, int numSamples)
 {
 	struct tsf_region* region = v->region;
-	float* input = f->fontSamples;
+	tsf_sample* input = f->fontSamples;
 	float* outL = outputBuffer;
 	float* outR = (f->outputmode == TSF_STEREO_UNWEAVED ? outL + numSamples : TSF_NULL);
 
@@ -1299,7 +1355,7 @@ TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 	struct tsf_riffchunk chunkHead;
 	struct tsf_riffchunk chunkList;
 	struct tsf_hydra hydra;
-	float* floatBuffer = TSF_NULL;
+	tsf_sample* floatBuffer = TSF_NULL;
 	tsf_u32 smplCount = 0;
 
 	if (!tsf_riffchunk_read(TSF_NULL, &chunkHead, stream) || !TSF_FourCCEquals(chunkHead.id, "sfbk"))

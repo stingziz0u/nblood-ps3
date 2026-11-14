@@ -41,6 +41,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "pragmas.h"
 #include "sndcards.h"
 
+#ifdef __PPU__
+extern "C" void PS3_Log(const char *fmt, ...);
+#endif
+
 extern int MV_MixRate;
 extern int ASS_MIDISoundDriver;
 
@@ -218,7 +222,26 @@ static void _MIDI_MetaEvent(track *Track)
 
         case MIDI_TEMPO_CHANGE:
         {
-            int tempo = tabledivide32_noinline(60000000L, _MIDI_ReadNumber(Track->pos, 3));
+            int const usPerQuarter = _MIDI_ReadNumber(Track->pos, 3);
+#ifdef __PPU__
+            // PS3: a tempo outside 10..1000 bpm isn't music: the song read
+            // wrong (seen once per boot in the autotest's first level, -39
+            // and ~1900 bpm). The tempo stays as it was, and what was read
+            // goes to the log, to find where it came from.
+            if (usPerQuarter < 60000000 / 1000 || usPerQuarter > 60000000 / 10)
+            {
+                static int logged;
+                unsigned char const *const b = (unsigned char const *)Track->pos;
+
+                if (logged++ < 8)
+                    PS3_Log("[midi] tempo event ignored: %d us per quarter note (track %d of %d, byte %d, length %d: %02x %02x %02x)",
+                            usPerQuarter, (int)(Track - _MIDI_TrackPtr), _MIDI_NumTracks, (int)(Track->pos - Track->start),
+                            length, b[0], b[1], b[2]);
+                Track->pos += length;
+                return;
+            }
+#endif
+            int tempo = tabledivide32_noinline(60000000L, usPerQuarter);
             MIDI_SetTempo(tempo);
             break;
         }
@@ -699,7 +722,9 @@ int MIDI_PlaySong(char *song, int loopflag)
     if (_MIDI_Funcs == nullptr)
         return MIDI_NullMidiModule;
 
-    if (B_UNBUF32(song) != MIDI_HEADER_SIGNATURE)
+    // the signatures are "MThd" / "MTrk" read as a little-endian number:
+    // on a big-endian CPU (PS3) compared as is, every song was refused
+    if (B_UNBUF32(song) != B_LITTLE32(MIDI_HEADER_SIGNATURE))
         return MIDI_InvalidMidiFile;
 
     _MIDI_SongPtr = song;
@@ -734,7 +759,7 @@ int MIDI_PlaySong(char *song, int loopflag)
 
     while (numtracks--)
     {
-        if (B_UNBUF32(ptr) != MIDI_TRACK_SIGNATURE)
+        if (B_UNBUF32(ptr) != B_LITTLE32(MIDI_TRACK_SIGNATURE))
         {
             DO_FREE_AND_NULL(My_MIDI_TrackPtr);
 
@@ -769,6 +794,10 @@ int MIDI_PlaySong(char *song, int loopflag)
         MIDI_Reset();
 
     _MIDI_Reset = FALSE;
+
+#ifdef __PPU__
+    PS3_Log("[midi] new song: format %d, %d tracks, %d ticks per quarter note", format, _MIDI_NumTracks, _MIDI_Division);
+#endif
 
     // this can either stay like this, or I can add another field to the MIDI driver spec that holds the service callback
     if (SoundDriver_MIDI_StartPlayback() != MIDI_Ok)

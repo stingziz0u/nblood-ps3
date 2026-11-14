@@ -3,7 +3,13 @@
 
 int32_t mutex_init(mutex_t *mutex)
 {
-#if SDL_MAJOR_VERSION >= 2
+#if defined __PPU__
+    sys_lwmutex_attr_t attr = {};
+    attr.attr_protocol  = SYS_LWMUTEX_PROTOCOL_PRIO;
+    attr.attr_recursive = SYS_LWMUTEX_ATTR_NOT_RECURSIVE;
+    Bstrncpy(attr.name, "mutex", sizeof(attr.name));
+    return sysLwMutexCreate(mutex, &attr) == 0 ? 0 : -1;
+#elif SDL_MAJOR_VERSION >= 2
     // SDL2's spinlock is most preferable
     *mutex = 0;
     return 0;
@@ -27,7 +33,9 @@ int32_t mutex_init(mutex_t *mutex)
 
 void mutex_destroy(mutex_t *mutex)
 {
-#if SDL_MAJOR_VERSION >= 2
+#if defined __PPU__
+    sysLwMutexDestroy(mutex);
+#elif SDL_MAJOR_VERSION >= 2
     *mutex = 0;
 #elif defined _WIN32
     DeleteCriticalSection(mutex);

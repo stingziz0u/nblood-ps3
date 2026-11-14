@@ -9,6 +9,11 @@
 #define LIBASYNC_ALIGNED_ALLOC(size, align) Xaligned_alloc(size, align)
 #define LIBASYNC_ALIGNED_FREE(ptr)          Xaligned_free(ptr)
 
-#include "libasync.h"
+#ifdef __PPU__
+// No std::thread on the PS3: the tasks run at once (ps3/compat/ps3_async.h)
+# include "ps3_async.h"
+#else
+# include "libasync.h"
+#endif
 
 #endif  // libasync_config_h__

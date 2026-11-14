@@ -1,0 +1,180 @@
+/*
+ * polymost_fp.fcg -- Polymost's fragment shader (polymost1Frag.glsl, the
+ * GL_ARB_shader_texture_lod path, without the gradients) for the RSX. Detail and glow maps (high
+ * resolution packs only) aren't done.
+ *
+ * The uniforms come from the vertex program (polymost_vp.vcg), packed:
+ *
+ *   TEXCOORD0  xy texture coordinate, z v_distance, w linear fog factor
+ *   TEXCOORD1  u_texturePosSize
+ *   TEXCOORD2  xy u_halfTexelSize, zw u_clamp
+ *   TEXCOORD3  xy u_palswapPos, zw u_palswapSize
+ *   TEXCOORD4  x u_shade, yz u_numShades, w u_visFactor
+ *   TEXCOORD5  x u_colorCorrection.x - 1 (gamma), y u_useColorOnly,
+ *              z u_usePalette, w u_shadeInterpolate
+ *   TEXCOORD6  xyz u_npotEmulation (w is 1 / y), w contrast
+ *   TEXCOORD7  rgb fog color, w saturation
+ *
+ * DEBUG_VIEW (build_polymost_shaders.sh builds 0..7, L3+R3 cycles them on
+ * the console) shows a step of the shader instead of its result:
+ *   1 interpolated texture coordinate (fract, red/green)
+ *   2 coordinate the tile is sampled at (red/green), u_usePalette (blue)
+ *   3 the texture as sampled (indexed tiles: the index as grey)
+ *   4 the palette's color (before shade, fog, vertex color)
+ *   5 the vertex color
+ *   6 u_usePalette (red), u_useColorOnly (green), fog factor (blue)
+ *   7 shade / numShades (red), the shade table's index (green),
+ *     u_palswapSize.x * 4 (blue)
+ *   8 the tile's center texel, through the palette (one color a tile)
+ *   9 the whole texture (sheet) over the polygon, through the palette
+ */
+
+#ifndef DEBUG_VIEW
+#define DEBUG_VIEW 0
+#endif
+
+/* FAST (the result only, picked per draw by ps3gl_prog_apply):
+     1  no NPOT emulation (u_npotEmulation.z 0), no color correction
+        (u_colorCorrection 1 1 1): the common case, ~20 instructions less
+     2  as 1, and no shade interpolation (u_shadeInterpolate 0): one shade
+        table and one palette lookup instead of two each
+     3  u_useColorOnly (full screen tints, menu rectangles): the vertex
+        color, fog and color correction; no texture at all (the full
+        program over the whole screen, for a fade, cost the RSX enough to
+        drop the menus that fade the screen to 30 fps) */
+#ifndef FAST
+#define FAST 0
+#endif
+
+float4 main(
+    float4 t0   : TEXCOORD0,
+    float4 tps  : TEXCOORD1,
+    float4 htc  : TEXCOORD2,
+    float4 psw  : TEXCOORD3,
+    float4 sh   : TEXCOORD4,
+    float4 fl   : TEXCOORD5,
+    float4 npot : TEXCOORD6,
+    float4 fogc : TEXCOORD7,
+    float4 vcol : COLOR0,
+
+    uniform sampler2D s_texture : TEXUNIT0,
+    uniform sampler2D s_palswap : TEXUNIT1,
+    uniform sampler2D s_palette : TEXUNIT2
+) : COLOR
+{
+    float2 tc = t0.xy;
+    float usePalette = fl.z;
+
+#if DEBUG_VIEW == 1
+    return float4(frac(tc), 0.0, 1.0);
+#elif DEBUG_VIEW == 8 || DEBUG_VIEW == 9
+    {
+# if DEBUG_VIEW == 8
+        float idx = tex2D(s_texture, tps.xy + tps.zw * 0.5).r;
+# else
+        float idx = tex2D(s_texture, frac(tc)).r;
+# endif
+        float ci = tex2D(s_palswap, float2(idx, 0.0) * psw.zw + psw.xy).r * (255.0 / 256.0) + (0.5 / 256.0);
+        float4 pc = tex2D(s_palette, float2(ci, 0.0));
+        return float4(lerp(float3(idx, idx, idx), pc.rgb, usePalette), 1.0);
+    }
+#endif
+
+#if FAST == 3
+    {
+        /* what the full program gives with u_useColorOnly 1: the texture
+           is white, nothing is fullbright */
+        float4 c = vcol;
+        c.rgb = lerp(fogc.rgb, c.rgb, saturate(t0.w));
+        float l = dot(c.rgb, float3(0.2126, 0.7152, 0.0722));
+        c.rgb = lerp(float3(l, l, l), c.rgb, fogc.w);
+        c.rgb = npot.w * c.rgb + (0.5 * (1.0 - npot.w)) * c.a;
+        c.rgb = c.rgb + fl.x * c.a;
+        return c;
+    }
+#endif
+
+#if FAST
+    float2 newCoord = tc;
+#else
+    /* NPOT emulation (GLSL mod(a, b) = a - b * floor(a / b)) */
+    float2 coord = lerp(tc, tc.yx, usePalette);
+    float rows = floor(coord.y / npot.y);
+    float m = coord.y - npot.y * rows;
+    coord = float2(floor(m) * npot.x + coord.x, rows + m);
+    float2 newCoord = lerp(tc, lerp(coord, coord.yx, usePalette), npot.z);
+#endif
+
+    float2 texCoord = lerp(frac(newCoord), saturate(newCoord), htc.zw);
+    texCoord = clamp(tps.zw * texCoord, htc.xy, tps.zw - htc.xy);
+
+    /* The texel's center: indexed tiles are sampled GL_NEAREST anyway, and
+       a coordinate right on a texel edge (the outlines of the menu font,
+       tile seams) came out as the neighbour on some pixels. One texel of
+       the tilesheet is 2 * u_halfTexelSize; 0 for a texture of its own,
+       left alone. */
+    float2 sheetCoord = tps.xy + texCoord;
+    {
+        float2 texel = 2.0 * htc.xy;
+        float2 centered = (floor(sheetCoord / max(texel, 1.0e-6)) + 0.5) * texel;
+        sheetCoord = (htc.x > 0.0) ? centered : sheetCoord;
+    }
+
+    /* (GLSL: texture2DGradARB with the derivatives of tc. PSL1GHT's
+       cgcomp drops TXD without a word, and the tilesheets have one level
+       and GL_NEAREST anyway: a plain lookup.) */
+    float4 color = tex2D(s_texture, sheetCoord);
+
+#if DEBUG_VIEW == 2
+    return float4(sheetCoord, usePalette, 1.0);
+#elif DEBUG_VIEW == 3
+    return float4(color.rgb, 1.0);
+#elif DEBUG_VIEW == 5
+    return float4(vcol.rgb, 1.0);
+#elif DEBUG_VIEW == 6
+    return float4(usePalette, fl.y, saturate(t0.w), 1.0);
+#endif
+
+    /* palette: shade table, then base palette */
+    float shade = clamp(sh.x + clamp(sh.w * t0.z - 0.5 * fl.w, 0.0, sh.y), 0.0, sh.y - 1.0);
+    float shadeFloor = floor(shade);
+    float shadeFrac = shade - shadeFloor;
+    float colorIndex = tex2D(s_palswap, float2(color.r, shadeFloor * sh.z) * psw.zw + psw.xy).r *
+        (255.0 / 256.0) + (0.5 / 256.0);
+    float4 palettedColor = tex2D(s_palette, float2(colorIndex, 0.0));
+#if FAST < 2
+    float colorIndexNext = tex2D(s_palswap, psw.zw * float2(color.r, (shadeFloor + 1.0) * sh.z) + psw.xy).r *
+        (255.0 / 256.0) + (0.5 / 256.0);
+    float4 palettedColorNext = tex2D(s_palette, float2(colorIndexNext, 0.0));
+    palettedColor.rgb = lerp(palettedColor.rgb, palettedColorNext.rgb, shadeFrac * fl.w);
+#endif
+
+#if DEBUG_VIEW == 4
+    return float4(palettedColor.rgb, 1.0);
+#elif DEBUG_VIEW == 7
+    return float4(saturate(shade / max(sh.y, 1.0)), colorIndex, saturate(psw.z * 4.0), 1.0);
+#endif
+    float fullbright = lerp(usePalette * palettedColor.a, 0.0, fl.y);
+    palettedColor.a = 1.0 - floor(color.r);
+    color = lerp(color, palettedColor, usePalette);
+
+    color = lerp(color, float4(1.0, 1.0, 1.0, 1.0), fl.y);
+    color.rgb = lerp(vcol.rgb * color.rgb, color.rgb, fullbright);
+
+    /* fog (t0.w is huge with fog off: the factor clamps to 1) */
+    float fogFactor = clamp(t0.w, fullbright, 1.0);
+    color.rgb = lerp(fogc.rgb, color.rgb, fogFactor);
+
+    color.a *= vcol.a;
+
+#if !FAST
+    /* u_colorCorrection: saturation, contrast, then brightness (the GLSL
+       matrix product written out) */
+    float luma = dot(color.rgb, float3(0.2126, 0.7152, 0.0722));
+    color.rgb = lerp(float3(luma, luma, luma), color.rgb, fogc.w);
+    color.rgb = npot.w * color.rgb + (0.5 * (1.0 - npot.w)) * color.a;
+    color.rgb = color.rgb + fl.x * color.a;
+#endif
+
+    return color;
+}

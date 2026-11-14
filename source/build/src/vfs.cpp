@@ -1450,10 +1450,15 @@ int32_t kdfread_LZ4(void *buffer, int dasizeof, int count, buildvfs_kfd fil)
     int32_t leng;
 
     // read compressed data length
-    if (kread_and_test(fil, &leng, sizeof(leng)) || leng < 0)
+    if (kread_and_test(fil, &leng, sizeof(leng)))
         return -1;
 
+    // (swapped first: on big endian the raw value of a length whose low
+    // byte is 0x80 or more is negative -- PS3 savegames didn't load)
     leng = B_LITTLE32(leng);
+
+    if (leng < 0)
+        return -1;
 
     char *pCompressedData = compressedDataStackBuf;
 

@@ -12,7 +12,11 @@
 extern "C" {
 #endif
 
-#if SDL_MAJOR_VERSION >= 2
+#if defined __PPU__
+// PS3: lv2's lightweight mutex (user space when uncontended)
+# include <lv2/mutex.h>
+typedef sys_lwmutex_t mutex_t;
+#elif SDL_MAJOR_VERSION >= 2
 typedef SDL_SpinLock mutex_t;
 #elif defined _WIN32
 # include "windows_inc.h"
@@ -28,7 +32,9 @@ extern void mutex_destroy(mutex_t *mutex);
 
 static FORCE_INLINE void mutex_lock(mutex_t *mutex)
 {
-#if SDL_MAJOR_VERSION >= 2
+#if defined __PPU__
+    sysLwMutexLock(mutex, 0);
+#elif SDL_MAJOR_VERSION >= 2
     SDL_AtomicLock(mutex);
 #elif defined _WIN32
     EnterCriticalSection(mutex);
@@ -39,7 +45,9 @@ static FORCE_INLINE void mutex_lock(mutex_t *mutex)
 
 static FORCE_INLINE void mutex_unlock(mutex_t *mutex)
 {
-#if SDL_MAJOR_VERSION >= 2
+#if defined __PPU__
+    sysLwMutexUnlock(mutex);
+#elif SDL_MAJOR_VERSION >= 2
     SDL_AtomicUnlock(mutex);
 #elif defined _WIN32
     LeaveCriticalSection(mutex);
@@ -51,7 +59,9 @@ static FORCE_INLINE void mutex_unlock(mutex_t *mutex)
 #if SDL_MAJOR_VERSION != 1
 static FORCE_INLINE bool mutex_try(mutex_t *mutex)
 {
-#if SDL_MAJOR_VERSION >= 2
+#if defined __PPU__
+    return sysLwMutexTryLock(mutex) == 0;
+#elif SDL_MAJOR_VERSION >= 2
     return SDL_AtomicTryLock(mutex);
 #elif defined _WIN32
     return TryEnterCriticalSection(mutex);

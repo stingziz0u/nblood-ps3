@@ -21,4 +21,8 @@ int  SF2Drv_MIDI_StartPlayback(void);
 void SF2Drv_MIDI_HaltPlayback(void);
 void SF2Drv_MIDI_SetTempo(int tempo, int division);
 void SF2Drv_MIDI_Service(void);
+#ifdef __PPU__
+void SF2Drv_MIDI_Lock(void);
+void SF2Drv_MIDI_Unlock(void);
+#endif
 #endif // driver_sf2_h__

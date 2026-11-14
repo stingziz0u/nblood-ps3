@@ -86,7 +86,13 @@ short voxelIndex[kMaxTiles];
 
 const char *pzBaseFileName = "TILES%03i.ART"; //"TILES%03i.ART";
 
+#ifdef __PPU__
+// PS3: about 213 MB for everything (EDuke32-PS3's: the classic games' art
+// is far smaller than this)
+int32_t MAXCACHE1DSIZE = (48*1024*1024);
+#else
 int32_t MAXCACHE1DSIZE = (96*1024*1024);
+#endif
 
 int tileInit(char a1, const char *a2)
 {

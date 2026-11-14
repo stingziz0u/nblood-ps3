@@ -159,6 +159,8 @@ int FX_Init(int numvoices, int numchannels, int mixrate, void* initdata)
     int SoundCard = ASS_SDL;
 #elif defined RENDERTYPEWIN
     int SoundCard = ASS_DirectSound;
+#elif defined RENDERTYPEPS3
+    int SoundCard = ASS_PS3;
 #endif
 
     VLOG_F(LOG_ASS, "Initializing Apogee Sound System");
