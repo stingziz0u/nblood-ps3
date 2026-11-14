@@ -236,7 +236,42 @@ void WeaponInit(void)
         weaponQAV[i] = (QAV*)gSysRes.Lock(hRes);
         weaponQAV[i]->nSprite = -1;
         if (i == 11)
+        {
+#if B_BIG_ENDIAN == 1
+            // the CRC is of the file's (little-endian) bytes: those of a copy
+            // swapped back
+            QAV *pCopy = (QAV *)Xmalloc(hRes->size);
+            memcpy(pCopy, weaponQAV[i], hRes->size);
+            int const nFrames = pCopy->nFrames;
+            int const nRoom = ((int)hRes->size - (int)offsetof(QAV, frames)) / (int)sizeof(FRAMEINFO);
+            pCopy->nFrames = B_LITTLE32(pCopy->nFrames);
+            pCopy->ticksPerFrame = B_LITTLE32(pCopy->ticksPerFrame);
+            pCopy->at10 = B_LITTLE32(pCopy->at10);
+            pCopy->x = B_LITTLE32(pCopy->x);
+            pCopy->y = B_LITTLE32(pCopy->y);
+            pCopy->nSprite = B_LITTLE32(pCopy->nSprite);
+            for (int j = 0; j < nFrames && j < nRoom; j++)
+            {
+                FRAMEINFO *pFrame = &pCopy->frames[j];
+                pFrame->nCallbackId = B_LITTLE32(pFrame->nCallbackId);
+                pFrame->sound.sound = B_LITTLE32(pFrame->sound.sound);
+                for (int k = 0; k < 8; k++)
+                {
+                    TILE_FRAME *pTile = &pFrame->tiles[k];
+                    pTile->picnum = B_LITTLE32(pTile->picnum);
+                    pTile->x = B_LITTLE32(pTile->x);
+                    pTile->y = B_LITTLE32(pTile->y);
+                    pTile->z = B_LITTLE32(pTile->z);
+                    pTile->stat = B_LITTLE32(pTile->stat);
+                    pTile->angle = B_LITTLE16(pTile->angle);
+                }
+            }
+            bFixCanDown2 = Bcrc32((void *)pCopy, hRes->size, 0) == kQAVCanDown2CRC;
+            Xfree(pCopy);
+#else
             bFixCanDown2 = Bcrc32((void *)weaponQAV[i], hRes->size, 0) == kQAVCanDown2CRC;
+#endif
+        }
     }
     hRes = gSysRes.Lookup("NEWCANDOWN2", "QAV");
     if (hRes && bFixCanDown2)

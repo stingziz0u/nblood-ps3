@@ -725,7 +725,51 @@ DICTNODE *Resource::Lookup(unsigned int id, const char *type)
     //if (strlen(type) > 3) return NULL;
     strcpy(type2, type);
     Bstrupr(type2);
+#ifdef __PPU__
+    DICTNODE *node = *Probe(id, type2);
+    if (node)
+        return node;
+
+    // PS3 test builds: is it in the dictionary at all, or only missing from
+    // the index? (WeaponInit: "Could not load QAV 118"). Missing ids are
+    // normal for some lookups: the first few only.
+    static int nMisses;
+    if (nMisses >= 16)
+        return NULL;
+    nMisses++;
+
+    for (unsigned int i = 0; i < count; i++)
+    {
+        if (dict[i].id == id && dict[i].type && !Bstrcasecmp(dict[i].type, type2))
+        {
+            LOG_F(WARNING, "[res] %s %u: not in the index but in the dictionary (#%u of %u, flags %02x, name %s, size %u, buffSize %u)",
+                  type2, id, i, count, (unsigned)(unsigned char)dict[i].flags,
+                  dict[i].name ? dict[i].name : "?", dict[i].size, buffSize);
+            return (dict[i].flags & (DICT_ID|DICT_EXTERNAL)) ? &dict[i] : NULL;
+        }
+    }
+
+    {
+        unsigned int n = 0, lo = ~0u, hi = 0;
+        for (unsigned int i = 0; i < count; i++)
+        {
+            if (dict[i].type && !Bstrcasecmp(dict[i].type, type2))
+            {
+                n++;
+                if (dict[i].flags & DICT_ID)
+                {
+                    lo = min(lo, dict[i].id);
+                    hi = max(hi, dict[i].id);
+                }
+            }
+        }
+        LOG_F(WARNING, "[res] %s %u: not in the dictionary (%u entries, %u of type %s, ids %u..%u)",
+              type2, id, count, n, type2, n ? lo : 0, hi);
+    }
+    return NULL;
+#else
     return *Probe(id, type2);
+#endif
 }
 
 void Resource::Read(DICTNODE *n)
@@ -789,7 +833,17 @@ void Resource::Read(DICTNODE *n, void *p)
             qav->x = B_LITTLE32(qav->x);
             qav->y = B_LITTLE32(qav->y);
             qav->nSprite = B_LITTLE32(qav->nSprite);
-            for (int i = 0; i < qav->nFrames; i++)
+            int nFrames = qav->nFrames;
+            int const nRoom = ((int)n->size - (int)offsetof(QAV, frames)) / (int)sizeof(FRAMEINFO);
+            if (nFrames > nRoom || nFrames < 0)
+            {
+                // never write past the resource's end (on little-endian
+                // nothing is written here at all)
+                LOG_F(WARNING, "QAV %s (id %u): %d frames in %u bytes, swapping %d",
+                      n->name, n->id, nFrames, n->size, nRoom < 0 ? 0 : nRoom);
+                nFrames = nRoom < 0 ? 0 : nRoom;
+            }
+            for (int i = 0; i < nFrames; i++)
             {
                 FRAMEINFO *pFrame = &qav->frames[i];
                 SOUNDINFO *pSound = &pFrame->sound;
@@ -815,7 +869,15 @@ void Resource::Read(DICTNODE *n, void *p)
             pSeq->ticksPerFrame = B_LITTLE16(pSeq->ticksPerFrame);
             pSeq->nSoundID = B_LITTLE16(pSeq->nSoundID);
             pSeq->flags = B_LITTLE32(pSeq->flags);
-            for (int i = 0; i < pSeq->nFrames; i++)
+            int nFrames = pSeq->nFrames;
+            int const nRoom = ((int)n->size - (int)offsetof(Seq, frames)) / (int)sizeof(SEQFRAME);
+            if (nFrames > nRoom || nFrames < 0)
+            {
+                LOG_F(WARNING, "SEQ %s (id %u): %d frames in %u bytes, swapping %d",
+                      n->name, n->id, nFrames, n->size, nRoom < 0 ? 0 : nRoom);
+                nFrames = nRoom < 0 ? 0 : nRoom;
+            }
+            for (int i = 0; i < nFrames; i++)
             {
                 SEQFRAME *pFrame = &pSeq->frames[i];
                 BitReader bitReader((char *)pFrame, sizeof(SEQFRAME));
@@ -857,7 +919,7 @@ void Resource::Read(DICTNODE *n, void *p)
             pSFX->format = B_LITTLE32(pSFX->format);
             pSFX->loopStart = B_LITTLE32(pSFX->loopStart);
         }
-        else if (!Bstrcmp(n->type, "QFN"))
+        else if (!Bstrcmp(n->type, "QFN") && n->size >= offsetof(QFONT, at820))
         {
             // the HUD/menu fonts: each glyph's offset into the font's
             // bitmap data (read as-is it pointed far outside the font)
@@ -866,7 +928,7 @@ void Resource::Read(DICTNODE *n, void *p)
             for (int i = 0; i < 256; i++)
                 pFont->at20[i].offset = B_LITTLE32(pFont->at20[i].offset);
         }
-        else if (!Bstrcmp(n->type, "QBM"))
+        else if (!Bstrcmp(n->type, "QBM") && n->size >= offsetof(QBITMAP, atc))
         {
             QBITMAP *pQBM = (QBITMAP*)p;
             pQBM->at2 = B_LITTLE16(pQBM->at2);

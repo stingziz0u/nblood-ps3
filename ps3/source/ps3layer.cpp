@@ -619,6 +619,14 @@ void PS3_FatalScreen(const char *title, const char *message)
     PS3_Log("[error] %s: %s", title ? title : "", message ? message : "");
     snprintf(last_error, sizeof(last_error), "%s%s%s", title ? title : "", title ? ": " : "",
              message ? message : "");
+
+    // Started from the launcher: it shows the error under its list once
+    // the game has quit (every fatal error does), in a fresh process with
+    // the video just set up. A text screen over the game's own video stayed
+    // black (NBlood, an error during the engine's start).
+    if (PS3_Launcher_Used())
+        return;
+
     ShowText(title, message, "Details: USRDIR/" PS3_PROGRAM ".log", "Press X to go on.");
     WaitForButtons(PS3_PAD_CROSS, 120);
 }
