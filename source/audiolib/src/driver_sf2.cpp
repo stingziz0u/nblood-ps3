@@ -297,6 +297,20 @@ const char *SF2Drv_ErrorString(int ErrorNumber)
 static int sf2_stream_read(void *handle, void *ptr, unsigned int size) { return kread(*(buildvfs_kfd *)handle, ptr, size); };
 static int sf2_stream_skip(void *handle, unsigned int size)            { return !klseek(*(buildvfs_kfd *)handle, size, SEEK_CUR); };
 
+#ifdef __PPU__
+// the font kept loaded between the music driver's restarts
+static char    sf2_kept_name[BMAX_PATH];
+static int32_t sf2_kept_size = -1;
+
+// "/GeneralUser-GS.sf2" and "GeneralUser-GS.sf2" are the same file (USRDIR)
+static char const *SF2_BareName(char const *name)
+{
+    while (*name == '/')
+        name++;
+    return name;
+}
+#endif
+
 static int SF2_LoadBank(char const *const filename)
 {
     buildvfs_kfd sf2_kfd    = kopen4loadfrommod(filename, 0);
@@ -305,6 +319,21 @@ static int SF2_LoadBank(char const *const filename)
     if (sf2_kfd != buildvfs_kfd_invalid)
     {
 #ifdef __PPU__
+        // The same font as the one kept (SF2Drv_MIDI_Shutdown keeps it): used
+        // again as it is. The sound menu's changes restart the music driver;
+        // closing the font and loading it again had the guard below refuse
+        // it (the level's memory taken in the meantime), and the music went
+        // to the OPL3 for good.
+        {
+            char const *const name = SF2_BareName(filename);
+
+            if (sf2_synth && !Bstrcasecmp(name, sf2_kept_name) && kfilelength(sf2_kfd) == sf2_kept_size)
+            {
+                kclose(sf2_kfd);
+                PS3_Log("[sf2] \"%s\" already in memory: kept", name);
+                return SF2_Ok;
+            }
+        }
         PS3_SF2_Lock();
         tsf_close(sf2_synth);
         sf2_synth = nullptr;
@@ -329,12 +358,17 @@ static int SF2_LoadBank(char const *const filename)
         tsf_close(sf2_synth);
 #endif
         sf2_synth = tsf_load(&sf2_stream);
+#ifdef __PPU__
+        int32_t const nFileSize = kfilelength(sf2_kfd);
+#endif
         kclose(sf2_kfd);
 
         if (sf2_synth)
         {
 #ifdef __PPU__
             PS3_Log("[sf2] \"%s\" takes %u KB of memory", filename, (unsigned)((mallinfo().uordblks - heap0) / 1024));
+            Bstrncpyz(sf2_kept_name, SF2_BareName(filename), sizeof(sf2_kept_name));
+            sf2_kept_size = nFileSize;
 #endif
             VLOG_F(LOG_ASS, "Loaded \"%s\"", filename);
             return SF2_Ok;
@@ -423,13 +457,15 @@ void SF2Drv_MIDI_Shutdown(void)
     SF2Drv_MIDI_HaltPlayback();
 
 #ifdef __PPU__
-    PS3_SF2_Lock();
-#endif
+    // PS3: the font stays loaded (halted above: nothing renders it) for
+    // the next SF2Drv_MIDI_Init; a different font replaces it there. The
+    // heap never gives memory back to the system, so loading it again only
+    // risked not finding the memory the level took meanwhile.
+    ErrorCode = SF2_Ok;
+#else
     tsf_close(sf2_synth);
     sf2_synth = nullptr;
     ErrorCode = SF2_Ok;
-#ifdef __PPU__
-    PS3_SF2_Unlock();
 #endif
 }
 
