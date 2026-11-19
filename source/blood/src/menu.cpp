@@ -1554,7 +1554,7 @@ void SetupControlsMenu(void)
     menuOptionsControlMouseButtonAssignment.Add(&itemOptionsControlMouseTitle, false);
     for (int i = 0, y = 60; i < MENUMOUSEFUNCTIONS; i++)
     {
-        pItemOptionsControlMouseButton[i] = new CGameMenuItemZCycle(MenuMouseNames[i], 3, 66, y, 180, 0, SetMouseButton, pzGamefuncsStrings, NUMGAMEFUNCTIONS+1, 0, true);
+        pItemOptionsControlMouseButton[i] = new CGameMenuItemZCycle(MenuMouseNames[i], 3, 66, y, 180, 0, SetMouseButton, pzGamefuncsStrings, nGamefuncsNum, 0, true);
         dassert(pItemOptionsControlMouseButton[i] != NULL);
         menuOptionsControlMouseButtonAssignment.Add(pItemOptionsControlMouseButton[i], i == 0);
         y += 10;
@@ -1647,7 +1647,7 @@ void SetupJoystickMenu(void)
             menuOptionsControlJoystickButtonAssignment[nPage].Add(&itemJoyButtonsTitle, false);
             for (int nButton = 0; nButton < JOYSTICKITEMSPERPAGE; nButton++) // populate button list
             {
-                pItemOptionsControlJoyButton[nPage][nButton] = new CGameMenuItemZCycle(MenuJoyButtonNames[i], 3, 66, y, 180, 0, SetJoyButton, pzGamefuncsStrings, NUMGAMEFUNCTIONS+1, 0, true);
+                pItemOptionsControlJoyButton[nPage][nButton] = new CGameMenuItemZCycle(MenuJoyButtonNames[i], 3, 66, y, 180, 0, SetJoyButton, pzGamefuncsStrings, nGamefuncsNum, 0, true);
                 dassert(pItemOptionsControlJoyButton[nPage][nButton] != NULL);
                 menuOptionsControlJoystickButtonAssignment[nPage].Add(pItemOptionsControlJoyButton[nPage][nButton], nButton == 0);
                 y += 9;
@@ -1724,11 +1724,11 @@ void SetupJoystickMenu(void)
         pItemOptionsControlJoystickAxisSaturate[nAxis] = new CGameMenuItemSlider("SATURATE:", 1, 18, y, 280, &JoystickAnalogueSaturate[nAxis], 5000, 10000, 250, SetJoystickSaturate, -1, -1, kMenuSlider10k);
 #else
         y += 17;
-        pItemOptionsControlJoystickAxisDigitalPos[nAxis] = new CGameMenuItemZCycle("DIGITAL +:", 1, 18, y, 280, 0, SetJoystickDigitalPos, pzGamefuncsStrings, NUMGAMEFUNCTIONS+1, 0, true); // get digital function
+        pItemOptionsControlJoystickAxisDigitalPos[nAxis] = new CGameMenuItemZCycle("DIGITAL +:", 1, 18, y, 280, 0, SetJoystickDigitalPos, pzGamefuncsStrings, nGamefuncsNum, 0, true); // get digital function
         dassert(pItemOptionsControlJoystickAxisDigitalPos[nAxis] != NULL);
         menuOptionsControlJoystickAxis[nAxis].Add(pItemOptionsControlJoystickAxisDigitalPos[nAxis], false);
         y += 17;
-        pItemOptionsControlJoystickAxisDigitalNeg[nAxis] = new CGameMenuItemZCycle("DIGITAL -:", 1, 18, y, 280, 0, SetJoystickDigitalNeg, pzGamefuncsStrings, NUMGAMEFUNCTIONS+1, 0, true); // get digital function
+        pItemOptionsControlJoystickAxisDigitalNeg[nAxis] = new CGameMenuItemZCycle("DIGITAL -:", 1, 18, y, 280, 0, SetJoystickDigitalNeg, pzGamefuncsStrings, nGamefuncsNum, 0, true); // get digital function
         dassert(pItemOptionsControlJoystickAxisDigitalNeg[nAxis] != NULL);
         menuOptionsControlJoystickAxis[nAxis].Add(pItemOptionsControlJoystickAxisDigitalNeg[nAxis], false);
         y += 25;
@@ -2585,7 +2585,7 @@ void SetupJoystickButtonsMenu(CGameMenuItemChain *pItem)
             if (!pButton)
                 break;
             pButton->m_nFocus = 0;
-            for (int j = 0; j < NUMGAMEFUNCTIONS+1; j++)
+            for (int j = 0; j < nGamefuncsNum; j++)
             {
                 if (JoystickFunctions[nJoyButton][bDoubleTap] == nGamefuncsValues[j])
                 {
@@ -2625,7 +2625,7 @@ void SetupJoystickAxesMenu(CGameMenuItemChain *pItem)
         }
         pItemOptionsControlJoystickAxisAnalogueInvert[nAxis]->at20 = JoystickAnalogueInvert[nAxis];
         pItemOptionsControlJoystickAxisDigitalPos[nAxis]->m_nFocus = 0;
-        for (int j = 0; j < NUMGAMEFUNCTIONS+1; j++)
+        for (int j = 0; j < nGamefuncsNum; j++)
         {
             if (JoystickDigitalFunctions[nAxis][0] == nGamefuncsValues[j])
             {
@@ -2634,7 +2634,7 @@ void SetupJoystickAxesMenu(CGameMenuItemChain *pItem)
             }
         }
         pItemOptionsControlJoystickAxisDigitalNeg[nAxis]->m_nFocus = 0;
-        for (int j = 0; j < NUMGAMEFUNCTIONS+1; j++)
+        for (int j = 0; j < nGamefuncsNum; j++)
         {
             if (JoystickDigitalFunctions[nAxis][1] == nGamefuncsValues[j])
             {
@@ -2710,7 +2710,7 @@ void SetJoystickDigitalPos(CGameMenuItemZCycle* pItem)
     {
         if (pItem == pItemOptionsControlJoystickAxisDigitalPos[nAxis])
         {
-            for (int j = 0; j < NUMGAMEFUNCTIONS+1; j++)
+            for (int j = 0; j < nGamefuncsNum; j++)
             {
                 if (JoystickDigitalFunctions[nAxis][0] == nGamefuncsValues[j])
                 {
@@ -2730,7 +2730,7 @@ void SetJoystickDigitalNeg(CGameMenuItemZCycle* pItem)
     {
         if (pItem == pItemOptionsControlJoystickAxisDigitalNeg[nAxis])
         {
-            for (int j = 0; j < NUMGAMEFUNCTIONS+1; j++)
+            for (int j = 0; j < nGamefuncsNum; j++)
             {
                 if (JoystickDigitalFunctions[nAxis][1] == nGamefuncsValues[j])
                 {
@@ -2839,7 +2839,7 @@ void SetupMouseButtonMenu(CGameMenuItemChain *pItem)
     {
         auto pItem = pItemOptionsControlMouseButton[i];
         pItem->m_nFocus = 0;
-        for (int j = 0; j < NUMGAMEFUNCTIONS+1; j++)
+        for (int j = 0; j < nGamefuncsNum; j++)
         {
             if (MouseFunctions[MenuMouseDataIndex[i][0]][MenuMouseDataIndex[i][1]] == nGamefuncsValues[j])
             {
