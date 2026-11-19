@@ -18,8 +18,11 @@
  *    poll, skipping freezes the sticks;
  *  - if the library keeps failing, end and init it again.
  *
- * Values are raw here (sticks 0..255, 128 = center). Dead zones and
- * what each button does are in ps3_input.c. No rumble.
+ *  - only pad number 1 (port 0) plays, as in re3-PS3: another pad is
+ *    logged and ignored, and pad 1 takes over again when it comes back.
+ *
+ * Values are raw here (sticks 0..255, 128 = center). Vibration at the end
+ * (re3-PS3's PS3_PadRumble).
  *
  * =======================================================================
  */
@@ -32,6 +35,7 @@
 #include "ps3_pad.h"
 
 #define STICK_CENTER 128
+#define PLAY_PORT    0      /* pad number 1 */
 
 static padInfo2 info;
 static padData data;
@@ -156,29 +160,18 @@ PS3_Pad_Poll(ps3_padstate_t *out)
 		}
 	}
 
-	/* keep the current port while it stays connected, otherwise the first
-	   connected one */
-	if (port >= 0 && (info.port_status[port] & 1))
+	/* Ren: player 1 plays, not the first pad found (a second pad took over
+	   when pad 1 went to sleep, and kept it when pad 1 came back) */
+	if (info.port_status[PLAY_PORT] & 1)
 	{
-		p = port;
-	}
-	else
-	{
-		for (i = 0; i < MAX_PORT_NUM; i++)
-		{
-			if (info.port_status[i] & 1)
-			{
-				p = i;
-				break;
-			}
-		}
+		p = PLAY_PORT;
 	}
 
 	if (p < 0)
 	{
 		if (connected)
 		{
-			PS3_Log("[pad] no pad connected");
+			PS3_Log("[pad] pad 1 gone: no control until a pad is number 1 again");
 		}
 
 		connected = 0;
@@ -232,13 +225,21 @@ done:
 	out->ly = data.button[7];
 }
 
-/* Vibration: the DualShock 3's two motors (small: on / off, large: 0..255)
-   on the active pad. Sent only when it changes. */
+/* Vibration: the DualShock 3's two motors (small: on / off, large:
+   0..255) on pad 1. As re3-PS3's PS3_PadRumble, which works on the
+   hardware: sent when it changes, and again every half second while it
+   runs. Also no more often than every 50 ms: Blood asks every frame with
+   a strength that fades (the pain), and a pad sent a new command 60 times
+   a second didn't shake at all. The first changes and any error go in the
+   log, with the pad's capability (0x10 = it has motors). */
 void
 PS3_Pad_SetRumble(int small_on, int large)
 {
-	static int last_small = -1, last_large = -1, last_port = -1;
+	static int last_small = -1, last_large = -1, last_port = -1, logged;
+	static unsigned long long last_send;
+	unsigned long long const now = PS3_Micros() / 1000;
 	padActParam act;
+	s32 r;
 
 	if (!initialized || !connected || port < 0)
 	{
@@ -251,15 +252,36 @@ PS3_Pad_SetRumble(int small_on, int large)
 
 	if (small_on == last_small && large == last_large && port == last_port)
 	{
+		/* the same: again only while it runs, every half second */
+		if ((!small_on && !large) || now - last_send < 500)
+		{
+			return;
+		}
+	}
+	else if ((small_on || large) && (last_small > 0 || last_large > 0) &&
+			 port == last_port && now - last_send < 50)
+	{
+		/* a new strength while it runs: at most every 50 ms (stopping
+		   always goes through) */
 		return;
 	}
 
 	memset(&act, 0, sizeof(act));
 	act.small_motor = (u8)small_on;
 	act.large_motor = (u8)large;
-	ioPadSetActDirect((u32)port, &act);
+	r = ioPadSetActDirect((u32)port, &act);
+
+	if (logged < 40 && (r != 0 || (small_on || large) != (last_small > 0 || last_large > 0)))
+	{
+		logged++;
+		PS3_Log("[pad] vibration %s (small %d, large %d) on port %d: ioPadSetActDirect = 0x%x, pad capability 0x%x (vibration %s)",
+				(small_on || large) ? "on" : "off", small_on, large, port, (unsigned)r,
+				(unsigned)info.device_capability[port],
+				(info.device_capability[port] & 0x10) ? "yes" : "no");
+	}
 
 	last_small = small_on;
 	last_large = large;
 	last_port = port;
+	last_send = now;
 }

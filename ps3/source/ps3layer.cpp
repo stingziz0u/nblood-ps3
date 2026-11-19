@@ -72,7 +72,11 @@ SYS_PROCESS_PARAM(1001, 0x100000);
 
 // The engine and the game run here. Build keeps big arrays on the stack
 // and the renderer recurses (mirrors, room over room).
-#define GAME_STACK_SIZE (8 * 1024 * 1024)
+// 2 MB: measured (patch 17's high-water mark) under 68 KB through the
+// startup, the menus, two levels, saving (the classic renderer's picture)
+// and loading; Blood's big arrays are global. It was 8 MB, 6 of them for
+// nothing out of the game's 213.
+#define GAME_STACK_SIZE (2 * 1024 * 1024)
 
 static volatile int exit_requested;
 

@@ -39,7 +39,9 @@
 /* the game thread's stack is filled with this at the start: what's still
    there at the bottom was never used (PS3_Debug_StackPeakKB) */
 #define STACK_FILL  0x5a5a5a5au
-#define STACK_GUARD (64 * 1024) /* kept clear of the stack's ends */
+#define STACK_GUARD (64 * 1024) /* kept clear of the stack's bottom (its
+                                   start is a guess, see ThreadStart) */
+#define STACK_TOP   (4 * 1024)  /* and of this frame */
 
 typedef struct
 {
@@ -79,7 +81,7 @@ PS3_Debug_ThreadStart(unsigned stack_size)
 	   guards, the entry's frames being a guess) filled */
 	{
 		uint32_t *p = (uint32_t *)((stack_lo + STACK_GUARD) & ~(uintptr_t)3);
-		uint32_t *const end = (uint32_t *)(((uintptr_t)&here - STACK_GUARD) & ~(uintptr_t)3);
+		uint32_t *const end = (uint32_t *)(((uintptr_t)&here - STACK_TOP) & ~(uintptr_t)3);
 
 		while (p < end)
 			*p++ = STACK_FILL;
@@ -96,7 +98,7 @@ unsigned NO_TRACE
 PS3_Debug_StackPeakKB(void)
 {
 	uint32_t const *p = (uint32_t const *)((stack_lo + STACK_GUARD) & ~(uintptr_t)3);
-	uint32_t const *const end = (uint32_t const *)(stack_hi - STACK_GUARD);
+	uint32_t const *const end = (uint32_t const *)(stack_hi - STACK_TOP);
 
 	if (!stack_lo)
 		return 0;
