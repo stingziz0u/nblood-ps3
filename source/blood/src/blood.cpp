@@ -1758,6 +1758,9 @@ int app_main(int argc, char const * const * argv)
             removesearchpaths_withuser(SEARCHPATH_CRYPTIC);
     }
 
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: before the OSD");
+#endif
     LOG_F(INFO, "Initializing OSD...");
 
     //Bsprintf(tempbuf, HEAD2 " %s", s_buildRev);
@@ -1778,6 +1781,9 @@ int app_main(int argc, char const * const * argv)
     gSysRes.Init(pUserRFF ? pUserRFF : "BLOOD.RFF");
     gGuiRes.Init("GUI.RFF");
     gSoundRes.Init(pUserSoundRFF ? pUserSoundRFF : "SOUNDS.RFF");
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: RFF indexes");
+#endif
 
     HookReplaceFunctions();
 
@@ -1787,6 +1793,9 @@ int app_main(int argc, char const * const * argv)
     LOG_F(INFO, "Creating standard color lookups");
     scrCreateStdColors();
     
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: palettes and color tables");
+#endif
     LOG_F(INFO, "Loading tiles");
     if (pUserTiles)
     {
@@ -1806,6 +1815,9 @@ int app_main(int argc, char const * const * argv)
     if (tileGetCRC32(2046) != kSplashScreenCRC) // if menu pic has been changed, use over plasma pak default
         gMenuPicnum = 2046;
 
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: tiles (with the cache)");
+#endif
     levelLoadDefaults();
 
     loaddefinitionsfile(BLOODWIDESCREENDEF);
@@ -1821,6 +1833,9 @@ int app_main(int argc, char const * const * argv)
     loaddefinitions_game(deffile, FALSE);
 
     powerupInit();
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: defs");
+#endif
     LOG_F(INFO, "Loading cosine table");
     trigInit(gSysRes);
     LOG_F(INFO, "Initializing view subsystem");
@@ -1833,6 +1848,9 @@ int app_main(int argc, char const * const * argv)
     LoadSavedInfo();
     gDemo.LoadDemoInfo();
     LOG_F(INFO, "There are %d demo(s) in the loop", gDemo.nDemosFound);
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: view, fire, weapons");
+#endif
     LOG_F(INFO, "Loading control setup");
     ctrlInit();
     timerInit(CLOCKTICKSPERSECOND);
@@ -1869,6 +1887,9 @@ int app_main(int argc, char const * const * argv)
 
     // PORT-TODO: CD audio init
 
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: controls and config");
+#endif
     LOG_F(INFO, "Initializing network users");
     netInitialize(true);
     scrSetGameMode(gSetup.fullscreen, gSetup.xdim, gSetup.ydim, gSetup.bpp);
@@ -1876,10 +1897,16 @@ int app_main(int argc, char const * const * argv)
     gGameMessageMgr.SetState(gMessageState);
     viewResizeView(gViewSize);
     vsync = videoSetVsync(vsync);
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: video mode");
+#endif
     LOG_F(INFO, "Initializing sound system");
     sndInit();
     sfxInit();
     gChoke.Init(518, playerHandChoke);
+#ifdef __PPU__
+    PS3_LogMemoryAt("startup: sound");
+#endif
     if (bAddUserMap)
     {
         levelAddUserMap(gUserMapFilename);

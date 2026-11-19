@@ -28,7 +28,18 @@
 #define NO_TRACE __attribute__((no_instrument_function))
 
 #define NCRUMBS     256
+/* the ring only in FTRACE=1 builds (1 MB otherwise unused: the Makefile
+   gives this file PS3_FTRACE with the instrumented ones) */
+#ifdef PS3_FTRACE
 #define NFTRACE     262144      /* power of two */
+#else
+#define NFTRACE     1
+#endif
+
+/* the game thread's stack is filled with this at the start: what's still
+   there at the bottom was never used (PS3_Debug_StackPeakKB) */
+#define STACK_FILL  0x5a5a5a5au
+#define STACK_GUARD (64 * 1024) /* kept clear of the stack's ends */
 
 typedef struct
 {
@@ -63,8 +74,37 @@ PS3_Debug_ThreadStart(unsigned stack_size)
 
 	stack_hi = (uintptr_t)&here + 4096;
 	stack_lo = stack_hi - stack_size;
+
+	/* the stack's high-water mark: everything below this frame (less the
+	   guards, the entry's frames being a guess) filled */
+	{
+		uint32_t *p = (uint32_t *)((stack_lo + STACK_GUARD) & ~(uintptr_t)3);
+		uint32_t *const end = (uint32_t *)(((uintptr_t)&here - STACK_GUARD) & ~(uintptr_t)3);
+
+		while (p < end)
+			*p++ = STACK_FILL;
+	}
+
 	PS3_Log("[debug] crash trail ready (game thread stack %08x-%08x; function trace only in FTRACE=1 builds)",
 			(unsigned)stack_lo, (unsigned)stack_hi);
+}
+
+/* The most of the game thread's stack used so far, in KB (from the
+   bottom up: the first word that isn't the fill). For the [mem] lines of
+   the loading screens and the exit: it reads up to 8 MB. */
+unsigned NO_TRACE
+PS3_Debug_StackPeakKB(void)
+{
+	uint32_t const *p = (uint32_t const *)((stack_lo + STACK_GUARD) & ~(uintptr_t)3);
+	uint32_t const *const end = (uint32_t const *)(stack_hi - STACK_GUARD);
+
+	if (!stack_lo)
+		return 0;
+
+	while (p < end && *p == STACK_FILL)
+		p++;
+
+	return (unsigned)((stack_hi - (uintptr_t)p) / 1024);
 }
 
 static inline int NO_TRACE

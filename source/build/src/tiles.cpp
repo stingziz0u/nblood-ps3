@@ -610,6 +610,26 @@ int32_t artLoadFiles(const char *filename, int32_t askedsize)
         artReadIndexedFile(tilefilei);
 
     Bmemset(gotpic, 0, sizeof(gotpic));
+#ifdef __PPU__
+    // PS3: the cache as big as the art there is (all of it fits, as with
+    // the fixed size: nothing is thrown out that wasn't before), plus room
+    // for what gets made later (the defs' tiles, the view's and the save
+    // pictures, the classic renderer's tables); askedsize at most. What
+    // the art doesn't use goes back to the game (the SoundFont).
+    {
+        int64_t nArt = 0;
+
+        for (int i = 0; i < MAXTILES; i++)
+            nArt += (int64_t)tilesiz[i].x * tilesiz[i].y;
+
+        int64_t const nWant = nArt + nArt / 4 + (8 << 20);
+        int32_t const nSize = (int32_t)clamp<int64_t>(nWant, 24 << 20, askedsize);
+
+        initprintf("PS3: tiles' cache %d KB (the art: %d KB, asked %d KB)\n",
+                   nSize >> 10, (int32_t)(nArt >> 10), askedsize >> 10);
+        askedsize = nSize;
+    }
+#endif
     //cachesize = min((int32_t)((Bgetsysmemsize()/100)*60),max(artsize,askedsize));
     g_vm_size = (Bgetsysmemsize() <= (uint32_t)askedsize) ? (int32_t)((Bgetsysmemsize() / 100) * 60) : askedsize;
     g_vm_data = Xmalloc(g_vm_size);

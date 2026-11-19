@@ -1713,6 +1713,7 @@ static void GameMain(void)
     int const r = app_main(argc, argv);
 
     PS3_Log("[8] app_main returned %d", r);
+    PS3_LogMemoryAt("exit");
     PS3_Exit(r);
 }
 

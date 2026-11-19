@@ -290,6 +290,7 @@ FTRACE_C_OBJS := $(patsubst %,$(OBJDIR)/ps3/gl/%.o,$(PS3GL_C))
 ifeq ($(FTRACE),1)
 $(FTRACE_OBJS): CXXFLAGS += $(FTRACE_FLAGS)
 $(FTRACE_C_OBJS): PCFLAGS += $(FTRACE_FLAGS)
+$(OBJDIR)/ps3/ps3_debug.o: PCFLAGS += -DPS3_FTRACE
 endif
 
 # ps3gl and the display write RSX memory, which is cache inhibited: a

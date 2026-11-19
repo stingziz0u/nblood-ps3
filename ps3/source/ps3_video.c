@@ -101,8 +101,9 @@ PS3_LogMemoryAt(const char *where)
 	ps3_user_mem_t um = { 0, 0 };
 
 	PS3_UserMemory(&um);
-	PS3_Log("[mem] %s: heap in use %u KB; system: %u KB free",
-			where, (unsigned)(mi.uordblks / 1024), (unsigned)(um.available / 1024));
+	PS3_Log("[mem] %s: heap in use %u KB; system: %u KB free; game stack peak %u KB",
+			where, (unsigned)(mi.uordblks / 1024), (unsigned)(um.available / 1024),
+			PS3_Debug_StackPeakKB());
 }
 
 

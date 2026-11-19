@@ -89,6 +89,7 @@ void PS3_Crumb(const char *tag, int val);
 unsigned PS3_SystemFreeKB(void);
 void PS3_LogMemoryAt(const char *where);
 void PS3_Debug_ThreadStart(unsigned stack_size);
+unsigned PS3_Debug_StackPeakKB(void);   /* the game thread's stack, most used */
 void PS3_Debug_Dump(const char *why);
 
 /* ps3layer.cpp */
