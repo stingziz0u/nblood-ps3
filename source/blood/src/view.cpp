@@ -3844,6 +3844,7 @@ RORHACK:
         for (int i = 0; i < mirrorcnt; i++)
             ror_status[i] = ROR_TestGotPic(i);
         fix16_t deliriumPitchI = gViewInterpolate ? interpolate(fix16_from_int(deliriumPitchO), fix16_from_int(deliriumPitch), gInterpolate) : fix16_from_int(deliriumPitch);
+        PS3_CRUMB("view: mirrors", mirrorcnt);
         DrawMirrors(cX, cY, cZ, cA, q16horiz + fix16_from_int(defaultHoriz) + deliriumPitchI, gInterpolate, bLink && !VanillaMode() ? gViewIndex : -1); // only hide self sprite while traversing between sector
         int bakCstat = gView->pSprite->cstat;
         if (gViewPos == VIEWPOS_0) // don't render self while in first person view
@@ -3859,9 +3860,11 @@ RORHACK:
             polymer_setanimatesprites(viewProcessSprites, cX, cY, cZ, fix16_to_int(cA), gInterpolate);
 #endif
         yax_preparedrawrooms();
+        PS3_CRUMB("view: drawrooms", nSectnum);
         renderDrawRoomsQ16(cX, cY, cZ, cA, q16horiz + fix16_from_int(defaultHoriz) + deliriumPitchI, nSectnum);
         UpdateGotSectorSectorFX();
         yax_drawrooms(viewProcessSprites, nSectnum, 0, gInterpolate);
+        PS3_CRUMB("view: sprites", spritesortcnt);
         viewProcessSprites(cX, cY, cZ, fix16_to_int(cA), gInterpolate);
         for (int i = 0; nRORLimit && (i < mirrorcnt); i++) // check if ror needs to be rendered
         {
@@ -3873,6 +3876,7 @@ RORHACK:
                 goto RORHACK;
             }
         }
+        PS3_CRUMB("view: masks", spritesortcnt);
         sub_5571C(1);
         int nSpriteSortCnt = spritesortcnt;
         renderDrawMasks();
@@ -3975,6 +3979,7 @@ RORHACK:
             }
             
             #ifdef NOONE_EXTENSIONS
+                PS3_CRUMB("view: weapon", gView->weaponQav);
                 if (gView->sceneQav < 0) WeaponDraw(gView, nShade, cX, cY, nPalette);
                 else if (gView->pXSprite->health > 0) playerQavSceneDraw(gView, nShade, cX, cY, nPalette);
                 else {
@@ -4108,6 +4113,7 @@ RORHACK:
         printext256(fX-strlen(gTempStr)*4, fY, 31, -1, gTempStr, 1);
     }
 #endif
+    PS3_CRUMB("view: hud", 0);
     viewDrawMapTitle();
     viewDrawAimedPlayerName();
     viewPrintFPS();

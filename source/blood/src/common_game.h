@@ -46,6 +46,15 @@ extern int g_useCwd;
 
 #define BYTEVERSION 109
 
+#ifdef __PPU__
+// PS3: the trail the layer writes to the log if the game thread dies
+// (ps3/source/ps3_debug.c)
+extern "C" void PS3_Crumb(const char *tag, int val);
+# define PS3_CRUMB(tag, val) PS3_Crumb(tag, (int)(val))
+#else
+# define PS3_CRUMB(tag, val) do { } while (0)
+#endif
+
 void _SetErrorLoc(const char *pzFile, int nLine);
 void _ThrowError(const char *pzFormat, ...);
 void __dassert(const char *pzExpr, const char *pzFile, int nLine);

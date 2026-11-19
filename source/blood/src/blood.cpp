@@ -674,12 +674,14 @@ void StartLevel(GAMEOPTIONS *pOpt)
             gHealthTemp[i] = xsprite[gPlayer[i].pSprite->extra].health;
         }
     }
+    PS3_CRUMB("StartLevel", 1);   // the map
     drawLoadingScreen(gStatsPicnum);
     if (dbLoadMap(pOpt->zLevelName,(int*)&startpos.x,(int*)&startpos.y,(int*)&startpos.z,&startang,&startsectnum,(unsigned int*)&pOpt->uMapCRC))
     {
         gQuitGame = true;
         return;
     }
+    PS3_CRUMB("StartLevel", 2);   // map loaded
     char levelName[BMAX_PATH];
     G_LoadMapHack(levelName, pOpt->zLevelName);
     wsrand(pOpt->uMapCRC);
@@ -719,6 +721,7 @@ void StartLevel(GAMEOPTIONS *pOpt)
         OSD_Printf("> Modern types erased: %d.\n", modernTypesErased);
     #endif
 
+    PS3_CRUMB("StartLevel", 3);
     scrLoadPLUs();
     startpos.z = getflorzofslope(startsectnum,startpos.x,startpos.y);
     for (int i = 0; i < kMaxPlayers; i++) {
@@ -745,9 +748,12 @@ void StartLevel(GAMEOPTIONS *pOpt)
         }
         #endif
     }
+    PS3_CRUMB("StartLevel", 4);
     InitSectorFX();
     warpInit();
+    PS3_CRUMB("StartLevel", 5);
     actInit(false);
+    PS3_CRUMB("StartLevel", 6);
     evInit();
     for (int i = connecthead; i >= 0; i = connectpoint2[i])
     {
@@ -759,10 +765,12 @@ void StartLevel(GAMEOPTIONS *pOpt)
                 gProfile[i].nAutoAim = gAutoAim;
                 gProfile[i].nWeaponSwitch = gWeaponSwitch;
             }
+            PS3_CRUMB("StartLevel playerInit", i);
             playerInit(i,0);
         }
         else if ((pOpt->nGameType == kGameTypeTeams) && !VanillaMode()) // if ctf mode and went to next level, reset scores
             playerResetScores(i);
+        PS3_CRUMB("StartLevel playerStart", i);
         playerStart(i, 1);
         gChokeCounter[i] = 0;
     }
@@ -791,32 +799,41 @@ void StartLevel(GAMEOPTIONS *pOpt)
             pPlayer->lastWeapon = gPlayerTemp[i].lastWeapon;
         }
     }
+    PS3_CRUMB("StartLevel", 7);
     pOpt->uGameFlags &= ~(kGameFlagContinuing|kGameFlagEnding);
     scrSetDac();
+    PS3_CRUMB("StartLevel", 8);
     PreloadCache();
+    PS3_CRUMB("StartLevel", 9);
     InitMirrors();
     gFrameClock = 0;
+    PS3_CRUMB("StartLevel", 10);
     trInit();
     if (!VanillaMode() && !packItemActive(gMe, kPackDivingSuit)) // if diving suit is not active, turn off reverb sound effect
         sfxSetReverb(0);
+    PS3_CRUMB("StartLevel", 11);
     ambInit();
     netResetState();
     gCacheMiss = 0;
     gFrame = 0;
     if (!gDemo.at1)
         gGameMenuMgr.Deactivate();
+    PS3_CRUMB("StartLevel", 12);
     levelTryPlayMusicOrNothing(pOpt->nEpisode, pOpt->nLevel);
     viewSetMessage("");
     viewSetErrorMessage("");
+    PS3_CRUMB("StartLevel", 13);
     viewResizeView(gViewSize);
     if ((pOpt->nGameType == kGameTypeTeams) && VanillaMode())
         gGameMessageMgr.SetCoordinates(gViewX0S+1,gViewY0S+15);
     if (!VanillaMode())
         viewClearInterpolations();
+    PS3_CRUMB("StartLevel", 14);
     netWaitForEveryone(0);
     totalclock = 0;
     gPaused = 0;
     gGameStarted = 1;
+    PS3_CRUMB("StartLevel", 15);   // done
     ready2send = 1;
 }
 
@@ -1935,6 +1952,7 @@ RESTART:
                             if (i >= 0)
                                 break;
                             faketimerhandler();
+                            PS3_CRUMB("ProcessFrame", gFrame);
                             ProcessFrame();
                         }
                     } while (totalclock >= gNetFifoClock && ready2send);
@@ -1956,6 +1974,7 @@ RESTART:
                 netCheckSync();
                 if (bDraw)
                 {
+                    PS3_CRUMB("viewDrawScreen", gFrame);
                     viewDrawScreen();
                     g_gameUpdateAndDrawTime = timerGetFractionalTicks() - gameUpdateStartTime;
                 }

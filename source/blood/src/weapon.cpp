@@ -232,7 +232,14 @@ void WeaponInit(void)
     {
         hRes = gSysRes.Lookup(i, "QAV");
         if (!hRes)
+#ifdef __PPU__
+            // PS3: what's behind it, said plainly (older BLOOD.RFFs stop
+            // short of the 1.21 weapon animations: QAV 118 and on)
+            ThrowError("BLOOD.RFF has no weapon animation %d (QAV %d):\n"
+                       "this port needs the data of Blood 1.21.\n", i, i);
+#else
             ThrowError("Could not load QAV %d\n", i);
+#endif
         weaponQAV[i] = (QAV*)gSysRes.Lock(hRes);
         weaponQAV[i]->nSprite = -1;
         if (i == 11)

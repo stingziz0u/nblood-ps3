@@ -278,12 +278,15 @@ FTRACE_FLAGS := -finstrument-functions \
 FTRACE_OBJS := \
 	$(patsubst %,$(OBJDIR)/build/%.o,engine polymost glbuild glsurface \
 		texcache hightile mdsprite voxmodel palette baselayer 2d) \
+	$(patsubst %,$(OBJDIR)/$(GAME_SRC)/%.o,$(GAME_CPP)) \
 	$(OBJDIR)/ps3/ps3layer.o
 FTRACE_C_OBJS := $(patsubst %,$(OBJDIR)/ps3/gl/%.o,$(PS3GL_C))
 
 # Off by default since patch 17: every call of the renderer went through
 # the ring, a real cost per frame. "make -C ps3 FTRACE=1" (after a clean)
-# for a build that leaves the trail.
+# for a build that leaves the trail. The game's own code is in it too
+# (NBlood-PS3 patch 9: Blood died starting a level, in its code or the
+# renderer's).
 ifeq ($(FTRACE),1)
 $(FTRACE_OBJS): CXXFLAGS += $(FTRACE_FLAGS)
 $(FTRACE_C_OBJS): PCFLAGS += $(FTRACE_FLAGS)

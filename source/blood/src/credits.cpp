@@ -170,6 +170,20 @@ int credKOpen4Load(char *&pzFile)
             nHandle = kopen4loadfrommod(pzFile, 0);
         }
     }
+#ifdef __PPU__
+    // PS3: BLOOD.INI names the install's folder (C:\BLOOD121\cs1.smk); the
+    // cutscenes are in USRDIR with the rest, so the bare name (the case
+    // doesn't matter: ps3_stdio.c)
+    if (nHandle == -1)
+    {
+        char *pSlash = strrchr(pzFile, '/');
+        if (pSlash && pSlash[1])
+        {
+            pzFile = pSlash + 1;
+            nHandle = kopen4loadfrommod(pzFile, 0);
+        }
+    }
+#endif
     return nHandle;
 }
 

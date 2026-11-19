@@ -725,51 +725,7 @@ DICTNODE *Resource::Lookup(unsigned int id, const char *type)
     //if (strlen(type) > 3) return NULL;
     strcpy(type2, type);
     Bstrupr(type2);
-#ifdef __PPU__
-    DICTNODE *node = *Probe(id, type2);
-    if (node)
-        return node;
-
-    // PS3 test builds: is it in the dictionary at all, or only missing from
-    // the index? (WeaponInit: "Could not load QAV 118"). Missing ids are
-    // normal for some lookups: the first few only.
-    static int nMisses;
-    if (nMisses >= 16)
-        return NULL;
-    nMisses++;
-
-    for (unsigned int i = 0; i < count; i++)
-    {
-        if (dict[i].id == id && dict[i].type && !Bstrcasecmp(dict[i].type, type2))
-        {
-            LOG_F(WARNING, "[res] %s %u: not in the index but in the dictionary (#%u of %u, flags %02x, name %s, size %u, buffSize %u)",
-                  type2, id, i, count, (unsigned)(unsigned char)dict[i].flags,
-                  dict[i].name ? dict[i].name : "?", dict[i].size, buffSize);
-            return (dict[i].flags & (DICT_ID|DICT_EXTERNAL)) ? &dict[i] : NULL;
-        }
-    }
-
-    {
-        unsigned int n = 0, lo = ~0u, hi = 0;
-        for (unsigned int i = 0; i < count; i++)
-        {
-            if (dict[i].type && !Bstrcasecmp(dict[i].type, type2))
-            {
-                n++;
-                if (dict[i].flags & DICT_ID)
-                {
-                    lo = min(lo, dict[i].id);
-                    hi = max(hi, dict[i].id);
-                }
-            }
-        }
-        LOG_F(WARNING, "[res] %s %u: not in the dictionary (%u entries, %u of type %s, ids %u..%u)",
-              type2, id, count, n, type2, n ? lo : 0, hi);
-    }
-    return NULL;
-#else
     return *Probe(id, type2);
-#endif
 }
 
 void Resource::Read(DICTNODE *n)
