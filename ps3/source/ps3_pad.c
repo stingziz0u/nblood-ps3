@@ -27,6 +27,7 @@
  * =======================================================================
  */
 
+#include <stdio.h>
 #include <string.h>
 
 #include <io/pad.h>
@@ -236,7 +237,7 @@ void
 PS3_Pad_SetRumble(int small_on, int large)
 {
 	static int last_small = -1, last_large = -1, last_port = -1, logged;
-	static unsigned long long last_send;
+	static unsigned long long last_send, on_since;
 	unsigned long long const now = PS3_Micros() / 1000;
 	padActParam act;
 	s32 r;
@@ -271,11 +272,24 @@ PS3_Pad_SetRumble(int small_on, int large)
 	act.large_motor = (u8)large;
 	r = ioPadSetActDirect((u32)port, &act);
 
+	if ((small_on || large) && !(last_small > 0 || last_large > 0))
+	{
+		on_since = now;
+	}
+
 	if (logged < 40 && (r != 0 || (small_on || large) != (last_small > 0 || last_large > 0)))
 	{
 		logged++;
-		PS3_Log("[pad] vibration %s (small %d, large %d) on port %d: ioPadSetActDirect = 0x%x, pad capability 0x%x (vibration %s)",
-				(small_on || large) ? "on" : "off", small_on, large, port, (unsigned)r,
+		char ran[32] = "";
+
+		if (!small_on && !large)
+		{
+			snprintf(ran, sizeof(ran), ", after %u ms", (unsigned)(now - on_since));
+		}
+
+		PS3_Log("[pad] vibration %s (small %d, large %d%s) on port %d: ioPadSetActDirect = 0x%x, pad capability 0x%x (vibration %s)",
+				(small_on || large) ? "on" : "off", small_on, large, ran,
+				port, (unsigned)r,
 				(unsigned)info.device_capability[port],
 				(info.device_capability[port] & 0x10) ? "yes" : "no");
 	}

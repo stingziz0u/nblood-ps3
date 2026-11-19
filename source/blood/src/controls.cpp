@@ -736,11 +736,16 @@ void ctrlJoystickRumble(int nTime)
     // it and the length stays short: 150 ms for a light one, 400 ms for
     // the hardest. ps3layer.cpp drives the motors (large = rumbleLow,
     // small on from rumbleHigh 0x4000).
+    // Patch 19: the pad got the orders (logged) but nothing was felt: a
+    // light hit (strength ~25) gave the large motor 90 of 255 for 160 ms,
+    // under what it takes to spin up. Now the large motor starts at 160
+    // and runs 300 ms at least (up to 800); the small one (the buzz you
+    // feel most) joins from strength 64.
     {
         int const nStrength = ClipRange(nTime, 0, 600);
-        int const nLow = ClipRange(0x2000 + nStrength * 96, 0, UINT16_MAX);
-        int const nHigh = nStrength >= 96 ? 0x8000 : 0;
-        int const nLength = 150 + nStrength * 250 / 600;
+        int const nLow = ClipRange(0x7000 + nStrength * 0x90, 0, UINT16_MAX);   // large motor 160..255
+        int const nHigh = nStrength >= 64 ? 0x8000 : 0;
+        int const nLength = 300 + nStrength * 500 / 600;
 
         joystick.rumbleLow = max<int>(joystick.rumbleLow, nLow);
         joystick.rumbleHigh = max<int>(joystick.rumbleHigh, nHigh);
