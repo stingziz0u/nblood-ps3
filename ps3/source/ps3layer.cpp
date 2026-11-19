@@ -789,6 +789,13 @@ static int StickAxis(int v)
 static int32_t pad_lastbits;
 static int32_t pad_lastaxis[PADAXIS_COUNT];
 
+// the buttons down now, SDL's order (the game's menus: a direction held
+// repeats, gamemenu.cpp); joystick.bits has only the presses not eaten
+extern "C" int32_t PS3_PadHeldBits(void)
+{
+    return pad_lastbits;
+}
+
 static void PadReleaseAll(void)
 {
     joystick.bits = 0;

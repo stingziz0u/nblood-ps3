@@ -47,6 +47,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "view.h"
 #ifdef NOONE_EXTENSIONS
 #include "nnexts.h"
+#ifdef __PPU__
+#include "ps3_blood.h"
+#endif
 #endif
 
 #define LZ4_THRESHOLD_SIZE (0x8000)
@@ -607,6 +610,9 @@ void LoadSavedInfo(void)
     }
     klistfree(pList);
     pathsearchmode = bakpathsearchmode;
+#ifdef __PPU__
+    PS3_LoadSavePictures();
+#endif
 }
 
 void UpdateSavedInfo(int nSlot)

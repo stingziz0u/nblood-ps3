@@ -98,6 +98,7 @@ char gamefunctions[NUMGAMEFUNCTIONS][MAXGAMEFUNCLEN] =
    "Show_Console",
    "Quick_Save",
    "Quick_Load",
+   "Lock_On",
    };
 
 #ifdef __SETUP__
@@ -313,7 +314,11 @@ static const char * joystickdefaults[MAXJOYBUTTONSANDHATS] =
    "Crouch_Toggle",
    "Open",
    "Last_Weapon",
+#ifdef __PPU__
+   "Map_Toggle",   // PS3: SELECT
+#else
    "",
+#endif
    "",
    "",
    "",

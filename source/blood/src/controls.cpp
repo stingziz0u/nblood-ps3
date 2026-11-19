@@ -35,6 +35,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "levels.h"
 #include "map2d.h"
 #include "view.h"
+#ifdef __PPU__
+#include "actor.h"
+#include "demo.h"
+#include "player.h"
+#include "ps3_blood.h"
+#endif
 
 
 int32_t ctrlCheckAllInput(void)
@@ -133,6 +139,7 @@ void ctrlInit(void)
     CONTROL_DefineFlag(gamefunc_MedKit, false);
     CONTROL_DefineFlag(gamefunc_ProximityBombs, false);
     CONTROL_DefineFlag(gamefunc_RemoteBombs, false);
+    CONTROL_DefineFlag(gamefunc_Lock_On, false);
 }
 
 void ctrlTerm(void)
@@ -147,6 +154,110 @@ float gViewAngleAdjust;
 float gViewLookAdjust;
 int gViewLookRecenter;
 int gCrouchToggleState = 0;
+
+#ifdef __PPU__
+// Lock-on (gamefunc_Lock_On, held; the PS3 port's, as in EDuke32-PS3): the
+// view turns to the nearest enemy in front that can be seen, and stays on
+// it while the button is held and the enemy lives. Moving and strafing
+// stay free (circling a target).
+
+// the middle of a sprite, height wise
+static int ctrlLockOnZ(spritetype const *pSprite)
+{
+    if (pSprite->cstat & CSTAT_SPRITE_YCENTER)
+        return pSprite->z;
+    return pSprite->z - ((pSprite->yrepeat * tilesiz[pSprite->picnum].y) << 1);
+}
+
+static int ctrlLockOnTarget(PLAYER *pPlayer, int nAngle, int nCurrent)
+{
+    spritetype *pMe = pPlayer->pSprite;
+    int nBest = -1;
+    int64_t nBestScore = INT64_MAX;
+
+    for (int nSprite = headspritestat[kStatDude]; nSprite >= 0; nSprite = nextspritestat[nSprite])
+    {
+        spritetype *pSprite = &sprite[nSprite];
+
+        if (pSprite == pMe || pSprite->extra <= 0 || pSprite->extra >= kMaxXSprites || !IsDudeSprite(pSprite)
+            || IsPlayerSprite(pSprite) || (pSprite->cstat & CSTAT_SPRITE_INVISIBLE) || xsprite[pSprite->extra].health <= 0)
+            continue;
+
+        int const dx = pSprite->x - pMe->x;
+        int const dy = pSprite->y - pMe->y;
+        int const nDist = approxDist(dx, dy);
+
+        if (nDist < 128 || nDist > 24576)
+            continue;
+
+        // in front: 45 degrees either way (90 for the one already locked)
+        int const nAngDiff = klabs(((getangle(dx, dy) - nAngle + 1024) & 2047) - 1024);
+
+        if (nAngDiff > (nSprite == nCurrent ? 512 : 256))
+            continue;
+
+        if (!cansee(pMe->x, pMe->y, pPlayer->zView, pMe->sectnum, pSprite->x, pSprite->y, ctrlLockOnZ(pSprite), pSprite->sectnum))
+            continue;
+
+        int64_t nScore = (int64_t)nAngDiff * 64 + nDist;
+
+        if (nSprite == nCurrent)
+            nScore >>= 2;  // stays on it unless another is much better
+
+        if (nScore < nBestScore)
+        {
+            nBestScore = nScore;
+            nBest = nSprite;
+        }
+    }
+
+    return nBest;
+}
+
+static void ctrlLockOn(GINPUT &input, double dtMs)
+{
+    static int nTarget = -1;
+
+    if (!BUTTON(gamefunc_Lock_On) || !gMe || gMe->pXSprite->health <= 0 || gView != gMe || gViewMode == 4 || gPaused)
+    {
+        nTarget = -1;
+        return;
+    }
+
+    // the angle the view has now: with the turns not yet sent
+    fix16_t const q16ang = VanillaMode() ? fix16_sadd(gMe->q16ang, gInput.q16turn) : gViewAngle;
+
+    nTarget = ctrlLockOnTarget(gMe, fix16_to_int(q16ang) & 2047, nTarget);
+
+    if (nTarget < 0)
+        return;
+
+    spritetype *pMe = gMe->pSprite;
+    spritetype *pSprite = &sprite[nTarget];
+    float const dx = (float)(pSprite->x - pMe->x);
+    float const dy = (float)(pSprite->y - pMe->y);
+    float const fDist = max(1.f, sqrtf(dx * dx + dy * dy));
+
+    // a fraction of the way each frame: there in about a tenth of a second
+    float const fFollow = (float)min(1.0, dtMs * (14.0 / 1000.0));
+
+    // yaw, in build angle units (2048 a turn)
+    float const fWantAng = atan2f(dy, dx) * (1024.f / fPI);
+    float const fDiffAng = fmodf(fWantAng - fix16_to_float(q16ang) + 3072.f, 2048.f) - 1024.f;
+
+    input.q16turn = fix16_from_float(fDiffAng * fFollow);
+
+    // pitch: the look angle (same units, up is positive) of Blood's own
+    // view (gViewLook, the local one); z is 16 times finer than x/y
+    if (!VanillaMode())
+    {
+        float const fWantLook = atan2f((float)(gMe->zView - ctrlLockOnZ(pSprite)) * (1.f / 16.f), fDist) * (1024.f / fPI);
+        float const fDiffLook = fWantLook - fix16_to_float(gViewLook);
+
+        input.q16mlook = fix16_from_float(fDiffLook * fFollow / 8.f);   // the game adds it <<3
+    }
+}
+#endif
 
 void ctrlGetInput(void)
 {
@@ -173,6 +284,28 @@ void ctrlGetInput(void)
     auto scaleAdjustmentToInterval = [=](double x) { return x * kTicsPerSec / (1000.0 / elapsedInputTicks); };
 
     CONTROL_ProcessBinds();
+
+#ifdef __PPU__
+    // dead in a single player game: a new press of Weapon_Fire's button
+    // opens Load Game (Open restarts the level, as always); the one held
+    // while dying doesn't count. The prompt: view.cpp.
+    {
+        static bool bFireHeld = true;
+        bool const bFire = BUTTON(gamefunc_Weapon_Fire) != 0;
+
+        if (!PS3_DeathPromptShown())
+            bFireHeld = true;
+        else if (bFire && !bFireHeld)
+        {
+            bFireHeld = true;
+            CONTROL_ClearButton(gamefunc_Weapon_Fire);
+            PS3_OpenLoadMenu();
+            return;
+        }
+        else
+            bFireHeld = bFire;
+    }
+#endif
 
     if (gMouseAiming)
         gMouseAim = 0;
@@ -522,7 +655,15 @@ void ctrlGetInput(void)
         if (info.mousey == 0)
         {
             if (gMouseAim)
+#ifdef __PPU__
+                // PS3: half of PC's, so that a stick's look up/down turns as
+                // fast as its turning (below) at the same scale. The game adds
+                // q16mlook <<3 to the look angle: dpitch/16/256*8 = dpitch/512
+                // angle units, as dyaw/16/32 is for the turn.
+                input.q16mlook = fix16_sadd(input.q16mlook, fix16_sdiv(fix16_from_float(scaleAdjustmentToInterval(gMouseAimingFlipped ? info.dpitch : -info.dpitch)/16.f), F16(256)));
+#else
                 input.q16mlook = fix16_sadd(input.q16mlook, fix16_sdiv(fix16_from_float(scaleAdjustmentToInterval(gMouseAimingFlipped ? info.dpitch : -info.dpitch)/16.f), F16(128)));
+#endif
             else
                 input.forward -= int(scaleAdjustmentToInterval(info.dpitch)/2.f);
         }
@@ -533,6 +674,10 @@ void ctrlGetInput(void)
             gCenterViewOnDrop = 1;
         }
     }
+
+#ifdef __PPU__
+    ctrlLockOn(input, elapsedInputTicks);
+#endif
 
     if (KB_KeyPressed(sc_Pause)) // 0xc5 in disassembly
     {
@@ -583,6 +728,26 @@ void ctrlJoystickRumble(int nTime)
     if (!CONTROL_JoystickEnabled || !joystick.hasRumble || !gSetup.joystickrumble)
         return;
 
+#ifdef __PPU__
+    // PS3: what the game asks is how hard it was (a hit's pain, the heat
+    // of a fire near, the akimbo guns' kick: up to 600), which upstream
+    // also made the length: 8 ms each, so a big hit shook the pad for
+    // nearly 5 s and every new one added to it. Here the strength follows
+    // it and the length stays short: 150 ms for a light one, 400 ms for
+    // the hardest. ps3layer.cpp drives the motors (large = rumbleLow,
+    // small on from rumbleHigh 0x4000).
+    {
+        int const nStrength = ClipRange(nTime, 0, 600);
+        int const nLow = ClipRange(0x2000 + nStrength * 96, 0, UINT16_MAX);
+        int const nHigh = nStrength >= 96 ? 0x8000 : 0;
+        int const nLength = 150 + nStrength * 250 / 600;
+
+        joystick.rumbleLow = max<int>(joystick.rumbleLow, nLow);
+        joystick.rumbleHigh = max<int>(joystick.rumbleHigh, nHigh);
+        joystick.rumbleTime = max<int>(joystick.rumbleTime, nLength);
+        return;
+    }
+#endif
     const int nRumble = nTime<<9;
     nTime = ClipLow(nTime, 28)<<3;
     joystick.rumbleHigh = UINT16_MAX > joystick.rumbleHigh + nRumble ? joystick.rumbleHigh + nRumble : UINT16_MAX;

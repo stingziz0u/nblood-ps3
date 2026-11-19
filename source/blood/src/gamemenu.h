@@ -72,7 +72,8 @@ enum {
     kMenuSliderNone = 0,
     kMenuSliderValue,
     kMenuSliderPercent,
-    kMenuSliderQ16
+    kMenuSliderQ16,
+    kMenuSlider10k,   // (PS3) a value out of 10000 as a percent: the sticks' dead zone
 };
 
 struct CGameMenuEvent {
@@ -114,6 +115,13 @@ public:
     virtual void Draw(void) = 0;
     virtual bool Event(CGameMenuEvent &);
     virtual bool MouseEvent(CGameMenuEvent &);
+#ifdef __PPU__
+    // the on-screen keyboard (gamemenu.cpp): a text being typed, and how
+    virtual bool PS3_IsEditing(void) { return false; }
+    virtual void PS3_TypeChar(char) { }
+    virtual void PS3_EraseChar(void) { }
+    virtual const char *PS3_EditText(void) { return ""; }
+#endif
 };
 
 class CGameMenuItemText : public CGameMenuItem
@@ -309,6 +317,12 @@ public:
     void BackChar(void);
     virtual void Draw(void);
     virtual bool Event(CGameMenuEvent &);
+#ifdef __PPU__
+    virtual bool PS3_IsEditing(void) { return at30 != 0; }
+    virtual void PS3_TypeChar(char ch) { AddChar(ch); }
+    virtual void PS3_EraseChar(void) { BackChar(); }
+    virtual const char *PS3_EditText(void) { return at20 ? at20 : ""; }
+#endif
 };
 
 class CGameMenuItemZEditBitmap : public CGameMenuItem
@@ -329,6 +343,12 @@ public:
     void BackChar(void);
     virtual void Draw(void);
     virtual bool Event(CGameMenuEvent &);
+#ifdef __PPU__
+    virtual bool PS3_IsEditing(void) { return bScan != 0; }
+    virtual void PS3_TypeChar(char ch) { AddChar(ch); }
+    virtual void PS3_EraseChar(void) { BackChar(); }
+    virtual const char *PS3_EditText(void) { return at20 ? at20 : ""; }
+#endif
 };
 
 class CGameMenuItemQAV : public CGameMenuItem

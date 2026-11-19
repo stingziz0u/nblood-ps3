@@ -45,6 +45,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "sound.h"
 #include "sfx.h"
 #include "view.h"
+#ifdef __PPU__
+#include "music.h"   // SF2_BankFile
+#endif
 
 
 static inline int osdcmd_quit(osdcmdptr_t UNUSED(parm))
@@ -1057,6 +1060,9 @@ int32_t registerosdcommands(void)
         { "mus_restartonload", "restart the music when loading a saved game with the same map or not", (void *)&MusicRestartsOnLoadToggle, CVAR_BOOL, 0, 1 },
         { "mus_volume", "controls music volume", (void *)&MusicVolume, CVAR_INT, 0, 255 },
         { "mus_device", "music device", (void *)&MusicDevice, CVAR_INT, 0, ASS_NumSoundCards },
+#ifdef __PPU__
+        { "mus_sf2_bank", "the SoundFont (.sf2) of the SF2 synth", (void *)SF2_BankFile, CVAR_STRING, 0, BMAX_PATH },
+#endif
         { "mus_redbook", "enables/disables redbook audio", (void *)&CDAudioToggle, CVAR_BOOL, 0, 1 },
         { "net_address","sets network address used for multiplayer", (void *)zNetAddressBuffer, CVAR_STRING|CVAR_FUNCPTR, 0, 16 },
         { "net_port","sets network port used for multiplayer", (void *)zNetPortBuffer, CVAR_STRING|CVAR_FUNCPTR, 0, 6 },

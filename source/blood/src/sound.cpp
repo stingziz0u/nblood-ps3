@@ -500,6 +500,27 @@ void sndLoadGMTimbre(void)
 void InitMusicDevice(void)
 {
     int nStatus;
+#ifdef __PPU__
+    // PS3 (as EDuke32-PS3 and CrispyCell): a .sf2 copied into USRDIR is the
+    // music, until the player picks another bank or the OPL3 in the menu.
+    // The first time one turns up it goes into mus_sf2_bank (saved with
+    // mus_device), so that choice sticks.
+    if (!SF2_BankFile[0])
+    {
+        fnlist_t fnl = FNLIST_INITIALIZER;
+
+        fnlist_getnames(&fnl, "/", "*.sf2", 0, 0);
+
+        if (fnl.findfiles)
+        {
+            Bstrncpyz(SF2_BankFile, fnl.findfiles->name, sizeof(SF2_BankFile));
+            MusicDevice = ASS_SF2;
+            LOG_F(INFO, "Found %s: music through the SoundFont", SF2_BankFile);
+        }
+
+        fnlist_clearnames(&fnl);
+    }
+#endif
     if ((nStatus = MUSIC_Init(MusicDevice)) == MUSIC_Ok)
     {
         if (MusicDevice == ASS_AutoDetect)

@@ -161,7 +161,7 @@ BLOOD_CPP := blood actor ai aibat aibeast aiboneel aiburn aicaleb aicerber aicul
 	demo dude endgame eventq fire fx gamemenu gameutil getopt gfx gib globals gui \
 	inifile iob levels loadsave map2d menu messages mirrors misc network osdcmd \
 	player qav qheap replace resource screen sectorfx seq sfx sound tile trig \
-	triggers view warp weapon \
+	triggers view warp weapon ps3_blood \
 	nnextsif nnexts nnextstr nnextcitem nnextslaser nnextcdud aicdud aipatrol
 
 # The Smacker videos (the intro, Blood's cutscenes)

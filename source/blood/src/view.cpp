@@ -61,6 +61,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "weapon.h"
 #ifdef NOONE_EXTENSIONS
 #include "nnexts.h"
+#ifdef __PPU__
+#include "ps3_blood.h"
+#endif
 #endif
 
 struct VIEW {
@@ -3520,6 +3523,49 @@ int gLastPal = 0;
 
 int32_t g_frameRate;
 
+#ifdef __PPU__
+// The save's picture (ps3_blood.cpp): the player's view drawn into the tile
+// by the classic renderer at 320x200, the menus' format (200 columns of
+// 320, shown turned). renderSetTarget switches to REND_CLASSIC until
+// renderRestoreTarget, so with Polymost too it comes out of the software
+// renderer: the RSX's frame can't be read back. As EDuke32-PS3's Duke and
+// VoidSW. The rooms and the sprites, without the mirrors and the rooms
+// over rooms (a picture of the place, not the frame).
+void viewPS3SaveShot(int nTile)
+{
+    if (!gView || !gView->pSprite)
+        return;
+
+    if (!waloff[nTile] || tilesiz[nTile].x != 200 || tilesiz[nTile].y != 320)
+        tileAllocTile(nTile, 200, 320, 0, 0);
+    if (!waloff[nTile])
+        return;
+
+    spritetype *pSprite = gView->pSprite;
+    int const cX = pSprite->x, cY = pSprite->y;
+    int cZ = gView->zView;
+    fix16_t const cA = gView->q16ang;
+    fix16_t q16horiz = VanillaMode() ? gView->q16horiz : fix16_from_float(100.f * tanf(fix16_to_float(gView->q16look) * fPI / 1024.f));
+    if (gSlopeTilting)
+        q16horiz += gView->q16slopehoriz;
+    cZ += fix16_to_int(q16horiz * 10);
+    q16horiz = ClipRange(q16horiz, F16(-200), F16(200));
+    int const defaultHoriz = gCenterHoriz ? 100 : 90;
+    int const nSectnum = pSprite->sectnum;
+    if (nSectnum < 0 || nSectnum >= numsectors)
+        return;
+
+    renderSetTarget(nTile, 200, 320);
+    int const bakCstat = pSprite->cstat;
+    pSprite->cstat |= CSTAT_SPRITE_INVISIBLE;
+    renderDrawRoomsQ16(cX, cY, cZ, cA, q16horiz + fix16_from_int(defaultHoriz), nSectnum);
+    viewProcessSprites(cX, cY, cZ, fix16_to_int(cA), 65536);
+    renderDrawMasks();
+    pSprite->cstat = bakCstat;
+    renderRestoreTarget();
+}
+#endif
+
 void viewDrawScreen(void)
 {
     int nPalette = 0;
@@ -4114,6 +4160,9 @@ RORHACK:
     }
 #endif
     PS3_CRUMB("view: hud", 0);
+#ifdef __PPU__
+    PS3_DrawDeathPrompt();
+#endif
     viewDrawMapTitle();
     viewDrawAimedPlayerName();
     viewPrintFPS();

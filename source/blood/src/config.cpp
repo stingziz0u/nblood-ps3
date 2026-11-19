@@ -311,7 +311,11 @@ void CONFIG_SetDefaults(void)
 #endif
 
     gSetup.usejoystick = 1;
+#ifdef __PPU__
+    gSetup.joystickrumble = 1;   // the DualShock 3 has it
+#else
     gSetup.joystickrumble = 0;
+#endif
 
     gSetup.forcesetup       = 1;
     gSetup.noautoload       = 1;
@@ -693,6 +697,16 @@ void CONFIG_SetupJoystick(void)
         SCRIPT_GetNumber(scripthandle, "Controls", str,&scale);
         JoystickAnalogueSaturate[i] = scale;
         }
+
+#ifdef __PPU__
+        // a dead zone or saturation set by the menu before patch 12 was a
+        // 16.16 fraction (16384 = 0.25), out of mact's 10000: the stick
+        // was dead. Out of the menu's range: the default.
+        if (JoystickAnalogueDead[i] < 0 || JoystickAnalogueDead[i] > 5000)
+            JoystickAnalogueDead[i] = PS3_JOYSTICKANALOGUEDEAD;
+        if (JoystickAnalogueSaturate[i] < 5000 || JoystickAnalogueSaturate[i] > 10000)
+            JoystickAnalogueSaturate[i] = PS3_JOYSTICKANALOGUESATURATE;
+#endif
 
         Bsprintf(str,"JoystickAnalogInvert%d",i);
         scale = JoystickAnalogueInvert[i];

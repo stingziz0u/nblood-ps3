@@ -36,6 +36,107 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "qav.h"
 #include "resource.h"
 #include "view.h"
+#ifdef __PPU__
+#include "timer.h"
+#include "ps3_blood.h"
+
+// --------------------------------------------------------------------
+// PS3: the DualShock 3 in the menus. A direction held repeats (sliders,
+// lists); a text being typed (player name, save names) gets an
+// on-screen keyboard.
+
+extern "C" int32_t PS3_PadHeldBits(void);   // ps3layer.cpp: the buttons down now
+
+static CGameMenuItem *PS3_FocusItem(CGameMenu *pMenu)
+{
+    if (!pMenu || pMenu->m_nFocus < 0 || pMenu->m_nFocus >= pMenu->m_nItems)
+        return NULL;
+    return pMenu->pItemList[pMenu->m_nFocus];
+}
+
+static const char *const s_oskRows[3] = { "ABCDEFGHIJKLM", "NOPQRSTUVWXYZ", "0123456789.-_" };
+static const char *const s_oskSpecial[4] = { "SHIFT", "SPACE", "ERASE", "DONE" };
+enum { kOskCols = 13, kOskRows = 4, kOskSpecialRow = 3 };
+static int s_oskRow, s_oskCol;
+static bool s_oskLower;
+
+static void PS3_OskMove(int dx, int dy)
+{
+    if (dy)
+    {
+        int const nOld = s_oskRow;
+        s_oskRow = (s_oskRow + dy + kOskRows) % kOskRows;
+        if (nOld == kOskSpecialRow && s_oskRow != kOskSpecialRow)
+            s_oskCol = s_oskCol * kOskCols / 4 + 1;
+        else if (nOld != kOskSpecialRow && s_oskRow == kOskSpecialRow)
+            s_oskCol = s_oskCol * 4 / kOskCols;
+    }
+    if (dx)
+    {
+        int const n = s_oskRow == kOskSpecialRow ? 4 : kOskCols;
+        s_oskCol = (s_oskCol + dx + n) % n;
+    }
+}
+
+static char PS3_OskChar(int nRow, int nCol)
+{
+    char ch = s_oskRows[nRow][nCol];
+    if (s_oskLower && ch >= 'A' && ch <= 'Z')
+        ch += 'a' - 'A';
+    return ch;
+}
+
+// Cross on a key: returns the menu event it makes (DONE: Enter), or none
+static int PS3_OskPress(CGameMenuItem *pItem)
+{
+    if (s_oskRow != kOskSpecialRow)
+    {
+        pItem->PS3_TypeChar(PS3_OskChar(s_oskRow, s_oskCol));
+        return kMenuEventNone;
+    }
+    switch (s_oskCol)
+    {
+    case 0: s_oskLower = !s_oskLower; break;
+    case 1: pItem->PS3_TypeChar(' '); break;
+    case 2: pItem->PS3_EraseChar(); break;
+    case 3: return kMenuEventEnter;
+    }
+    return kMenuEventNone;
+}
+
+static void PS3_OskDraw(CGameMenuItem *pItem)
+{
+    // the panel: the menus' picture, dark, over the lower part
+    int const y1 = 116;
+    rotatesprite(160<<16, 100<<16, 131072, 0, gMenuPicnum, 40, 0, 2|8|64, 0, scale(y1, ydim, 200), xdim-1, ydim-1);
+
+    int const nBlink = 32-((int)totalclock&63);
+    char buffer[64];
+
+    // the text, with its cursor
+    Bsnprintf(buffer, sizeof(buffer), "%s%s", pItem->PS3_EditText(), ((int)totalclock & 32) ? "_" : " ");
+    viewDrawText(3, buffer, 160, y1 + 5, -128, 0, 1, 1);
+
+    for (int nRow = 0; nRow < 3; nRow++)
+    {
+        for (int nCol = 0; nCol < kOskCols; nCol++)
+        {
+            char str[2] = { PS3_OskChar(nRow, nCol), 0 };
+            bool const bSel = nRow == s_oskRow && nCol == s_oskCol;
+            viewDrawText(1, str, 160 + (nCol - 6) * 20, y1 + 17 + nRow * 13, bSel ? nBlink : 16, bSel ? 2 : 0, 1, 1);
+        }
+    }
+    for (int k = 0; k < 4; k++)
+    {
+        bool const bSel = s_oskRow == kOskSpecialRow && s_oskCol == k;
+        const char *pText = s_oskSpecial[k];
+        if (k == 0)
+            pText = s_oskLower ? "ABC" : "abc";
+        viewDrawText(3, pText, 160 + (2 * k - 3) * 35, y1 + 59, bSel ? nBlink : 16, bSel ? 2 : 0, 1, 1);
+    }
+    viewDrawText(3, "CROSS TYPE  SQUARE ERASE  TRIANGLE SPACE  START DONE  CIRCLE CANCEL", 160, y1 + 73, -128, 0, 1, 1);
+}
+#endif
 
 CMenuTextMgr gMenuTextMgr;
 CGameMenuMgr gGameMenuMgr;
@@ -157,6 +258,11 @@ void CGameMenuMgr::Draw(void)
     if (pActiveMenu)
     {
         pActiveMenu->Draw();
+#ifdef __PPU__
+        CGameMenuItem *pFocus = PS3_FocusItem(pActiveMenu);
+        if (pFocus && pFocus->PS3_IsEditing())
+            PS3_OskDraw(pFocus);
+#endif
         viewUpdatePages();
     }
 
@@ -290,6 +396,88 @@ void CGameMenuMgr::Process(void)
             break;
         }
     }
+#ifdef __PPU__
+    else if (CONTROL_JoystickEnabled && !key)
+    {
+        // the presses of this frame (ps3layer.cpp: a button's bit comes up
+        // once, when it goes down) and what is held now
+        int32_t const joy = JOYSTICK_GetControllerButtons();
+        JOYSTICK_ClearAllButtons();
+        int32_t const held = PS3_PadHeldBits();
+
+        // a direction held: again after 400 ms, then every 70 ms
+        static int nRepeat = -1;
+        static uint32_t nRepeatTime;
+        static const int nDirs[4] = { CONTROLLER_BUTTON_DPAD_UP, CONTROLLER_BUTTON_DPAD_DOWN, CONTROLLER_BUTTON_DPAD_LEFT, CONTROLLER_BUTTON_DPAD_RIGHT };
+        uint32_t const now = timerGetTicks();
+        int nDir = -1;
+        for (int d : nDirs)
+        {
+            if (joy & (1 << d))
+            {
+                nDir = nRepeat = d;
+                nRepeatTime = now + 400;
+                break;
+            }
+        }
+        if (nDir < 0 && nRepeat >= 0)
+        {
+            if (!(held & (1 << nRepeat)))
+                nRepeat = -1;
+            else if ((int32_t)(now - nRepeatTime) >= 0)
+            {
+                nDir = nRepeat;
+                nRepeatTime = now + 70;
+            }
+        }
+
+        CGameMenuItem *pFocus = PS3_FocusItem(pActiveMenu);
+        if (pFocus && pFocus->PS3_IsEditing())
+        {
+            // the on-screen keyboard
+            switch (nDir)
+            {
+            case CONTROLLER_BUTTON_DPAD_UP: PS3_OskMove(0, -1); break;
+            case CONTROLLER_BUTTON_DPAD_DOWN: PS3_OskMove(0, 1); break;
+            case CONTROLLER_BUTTON_DPAD_LEFT: PS3_OskMove(-1, 0); break;
+            case CONTROLLER_BUTTON_DPAD_RIGHT: PS3_OskMove(1, 0); break;
+            }
+            if (joy & (1 << CONTROLLER_BUTTON_A))
+                event.at0 = PS3_OskPress(pFocus);
+            else if (joy & (1 << CONTROLLER_BUTTON_X))
+                pFocus->PS3_EraseChar();
+            else if (joy & (1 << CONTROLLER_BUTTON_Y))
+                pFocus->PS3_TypeChar(' ');
+            else if (joy & (1 << CONTROLLER_BUTTON_START))
+                event.at0 = kMenuEventEnter;
+            else if (joy & ((1 << CONTROLLER_BUTTON_B) | (1 << CONTROLLER_BUTTON_BACK)))
+                event.at0 = kMenuEventEscape;
+        }
+        else
+        {
+            switch (nDir)
+            {
+            case CONTROLLER_BUTTON_DPAD_UP: event.at0 = kMenuEventUp; break;
+            case CONTROLLER_BUTTON_DPAD_DOWN: event.at0 = kMenuEventDown; break;
+            case CONTROLLER_BUTTON_DPAD_LEFT: event.at0 = kMenuEventLeft; break;
+            case CONTROLLER_BUTTON_DPAD_RIGHT: event.at0 = kMenuEventRight; break;
+            default:
+                if (joy & (1 << CONTROLLER_BUTTON_A))
+                    event.at0 = kMenuEventEnter;
+                else if (joy & ((1 << CONTROLLER_BUTTON_B) | (1 << CONTROLLER_BUTTON_START) | (1 << CONTROLLER_BUTTON_BACK)))
+                    event.at0 = kMenuEventEscape;
+                else if (joy & (1 << CONTROLLER_BUTTON_LEFTSHOULDER))
+                    event.at0 = kMenuEventTop;
+                else if (joy & (1 << CONTROLLER_BUTTON_RIGHTSHOULDER))
+                    event.at0 = kMenuEventBottom;
+                break;
+            }
+            // a new text starts on the keyboard's first key, in capitals
+            s_oskRow = s_oskCol = 0;
+            s_oskLower = false;
+        }
+    }
+#else
     else if (CONTROL_JoystickEnabled && !key)
     {
         static int32_t joyold = 0;
@@ -329,6 +517,7 @@ void CGameMenuMgr::Process(void)
         }
         joyold = joy;
     }
+#endif
     if (pActiveMenu->Event(event))
         Pop();
 
@@ -1616,6 +1805,9 @@ void CGameMenuItemSlider::Draw(void)
     case kMenuSliderQ16:
         snprintf(buffer, 16, "%.3f ", nValue/65536.f);
         break;
+    case kMenuSlider10k:
+        snprintf(buffer, 16, "%i%% ", (nValue+50)/100);
+        break;
     }
     int valueWidth;
     gMenuTextMgr.GetFontInfo(m_nFont, buffer, &valueWidth, NULL);
@@ -2204,7 +2396,13 @@ void CGameMenuItemZEditBitmap::Draw(void)
         snprintf(buffer, sizeof(buffer), "DIFFICULTY: %s", zDiffStrings[restoreGameDifficulty[at28]]);
         gMenuTextMgr.DrawText(buffer, m_nFont, 20, 50, 32, 0, true);
     }
+#ifdef __PPU__
+    // PS3: the focused slot's picture (ps3_blood.cpp), the menu's own if none
+    if (pMenu->IsFocusItem(this))
+        at2c->at24 = PS3_SavePicTile(at28);
+#else
     at2c->at24 = -1;
+#endif
     if (bScan)
         shade = -128;
     if (m_pzText)

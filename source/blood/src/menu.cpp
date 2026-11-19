@@ -39,6 +39,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "screen.h"
 #include "sound.h"
 #include "view.h"
+#ifdef __PPU__
+#include "ps3_blood.h"
+#endif
 
 void SaveGame(CGameMenuItemZEditBitmap *, CGameMenuEvent *);
 
@@ -550,6 +553,10 @@ CGameMenuItemZBool itemOptionsDisplayModeFullscreen("FULLSCREEN:", 3, 66, 80, 18
 CGameMenuItemZCycle itemOptionsDisplayModeVSync("VSYNC:", 3, 66, 90, 180, 0, NULL, pzVSyncStrings, ARRAY_SSIZE(pzVSyncStrings), 0);
 CGameMenuItemZCycle itemOptionsDisplayModeFrameLimit("FRAMERATE LIMIT:", 3, 66, 100, 180, 0, UpdateVideoModeMenuFrameLimit, pzFrameLimitStrings, 8, 0);
 CGameMenuItemChain itemOptionsDisplayModeApply("APPLY CHANGES", 3, 66, 125, 180, 0, NULL, 0, SetVideoMode, 0);
+#ifdef __PPU__
+void SetShowFps(CGameMenuItemZBool *pItem);
+CGameMenuItemZBool itemOptionsDisplayModeShowFps("SHOW FPS:", 3, 66, 110, 180, 0, SetShowFps, NULL, NULL);
+#endif
 
 void PreDrawDisplayColor(CGameMenuItem *);
 
@@ -672,14 +679,27 @@ static char sf2bankfile[BMAX_PATH];
 CGameMenu menuOptionsSoundSF2;
 
 CGameMenuItemTitle itemOptionsSoundSF2Title("SELECT SF2 BANK", 1, 160, 20, 2038);
+#ifdef __PPU__
+// PS3: the .sf2 files of USRDIR (the search path's root)
+CGameMenuFileSelect itemOptionsSoundSF2FS("", 3, 0, 0, 0, "/", "*.sf2", sf2bankfile);
+#else
 CGameMenuFileSelect itemOptionsSoundSF2FS("", 3, 0, 0, 0, "./", "*.sf2", sf2bankfile);
+#endif
 
 CGameMenuItemTitle itemOptionsSoundTitle("SOUND SETUP", 1, 160, 20, 2038);
 CGameMenuItemZBool itemOptionsSoundSoundToggle("SOUND:", 3, 66, 60, 180, false, UpdateSoundToggle, NULL, NULL);
 CGameMenuItemZBool itemOptionsSoundMusicToggle("MUSIC:", 3, 66, 70, 180, false, UpdateMusicToggle, NULL, NULL);
 CGameMenuItemZBool itemOptionsSound3DToggle("3D AUDIO:", 3, 66, 80, 180, false, Update3DToggle, NULL, NULL);
+#ifdef __PPU__
+// PS3: the volumes in steps of 5% (PC's went in steps of 19%), on a
+// percent of their own: the callbacks turn it into 0..255
+static int nPS3SoundVolume, nPS3MusicVolume;
+CGameMenuItemSlider itemOptionsSoundSoundVolume("SOUND VOLUME:", 3, 66, 90, 180, &nPS3SoundVolume, 0, 100, 5, UpdateSoundVolume, -1, -1, kMenuSliderPercent);
+CGameMenuItemSlider itemOptionsSoundMusicVolume("MUSIC VOLUME:", 3, 66, 100, 180, &nPS3MusicVolume, 0, 100, 5, UpdateMusicVolume, -1, -1, kMenuSliderPercent);
+#else
 CGameMenuItemSlider itemOptionsSoundSoundVolume("SOUND VOLUME:", 3, 66, 90, 180, &FXVolume, 0, 256, 48, UpdateSoundVolume, -1, -1, kMenuSliderPercent);
 CGameMenuItemSlider itemOptionsSoundMusicVolume("MUSIC VOLUME:", 3, 66, 100, 180, &MusicVolume, 0, 256, 48, UpdateMusicVolume, -1, -1, kMenuSliderPercent);
+#endif
 CGameMenuItemZCycle itemOptionsSoundSampleRate("SAMPLE RATE:", 3, 66, 110, 180, 0, UpdateSoundRate, pzSoundRateStrings, 3, 0);
 CGameMenuItemSlider itemOptionsSoundNumVoices("VOICES:", 3, 66, 120, 180, NumVoices, 16, 255, 16, UpdateNumVoices, -1, -1, kMenuSliderValue);
 CGameMenuItemZBool itemOptionsSoundCDToggle("REDBOOK AUDIO:", 3, 66, 130, 180, false, UpdateCDToggle, NULL, NULL);
@@ -831,6 +851,17 @@ const char *zJoystickAnalogue[] =
 };
 
 CGameMenuItemTitle itemJoyButtonsTitle("JOYSTICK SETUP", 1, 160, 20, 2038);
+#ifdef __PPU__
+// the button page's order: PS3_ButtonName's numbers (15 / 16: L2 / R2)
+static const int nPS3MenuButtons[] = { 0, 1, 2, 3, 9, 10, 15, 16, 7, 8, 11, 12, 13, 14, 4 };
+enum { kPS3MenuButtons = ARRAY_SIZE(nPS3MenuButtons) };
+static int PS3_MenuButtonFunction(int nButton)
+{
+    if (nButton >= 15)
+        return JoystickDigitalFunctions[nButton == 15 ? 4 : 5][1];
+    return JoystickFunctions[nButton][0];
+}
+#endif
 CGameMenuItemZCycle *pItemOptionsControlJoyButton[MAXJOYSTICKBUTTONPAGES][JOYSTICKITEMSPERPAGE];
 CGameMenuItemChain *pItemOptionsControlJoyButtonNextPage[MAXJOYSTICKBUTTONPAGES];
 
@@ -1190,6 +1221,10 @@ void SetupSoundsMenu(void)
 
 void SetupQuitMenu(void)
 {
+#ifdef __PPU__
+    itemQuitYesNo.m_pzText = "CROSS: YES   CIRCLE: NO";
+    itemRestartYesNo.m_pzText = "CROSS: YES   CIRCLE: NO";
+#endif
     menuQuit.Add(&itemQuitTitle, false);
     menuQuit.Add(&itemQuitText1, false);
     menuQuit.Add(&itemQuitYesNo, true);
@@ -1201,8 +1236,19 @@ void SetupQuitMenu(void)
     menuRestart.Add(&itemBloodQAV, false);
 }
 
+#ifdef __PPU__
+CGameMenuItemTitle itemPS3HelpTitle("CONTROLS", 1, 160, 20, 2038);
+#endif
+
 void SetupHelpOrderMenu(void)
 {
+#ifdef __PPU__
+    // PS3: the DualShock 3's buttons (ps3_blood.cpp), not the keyboard's
+    // pages; the background first, the title over it
+    menuOrder.Add(PS3_HelpItem(), true);
+    menuOrder.Add(&itemPS3HelpTitle, false);
+    return;
+#endif
     menuOrder.Add(&itemHelp4QAV, true);
     menuOrder.Add(&itemHelp5QAV, false);
     menuOrder.Add(&itemHelp3QAV, false);
@@ -1316,7 +1362,15 @@ void SetupOptionsMenu(void)
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolPowerupDuration, false);
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolShowMapTitle, false);
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolMessages, false);
+#ifdef __PPU__
+    // PS3: WIDESCREEN is in VIDEO MODE, by the resolution
+    itemOptionsDisplayFOV.m_nY = 160;
+# ifdef USE_OPENGL
+    itemOptionsDisplayPolymost.m_nY = 170;
+# endif
+#else
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolWidescreen, false);
+#endif
     menuOptionsDisplay.Add(&itemOptionsDisplayFOV, false);
 #ifdef USE_OPENGL
     menuOptionsDisplay.Add(&itemOptionsDisplayPolymost, false);
@@ -1366,11 +1420,25 @@ void SetupOptionsMenu(void)
 #ifdef USE_OPENGL
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeRenderer, false);
 #endif
+#ifdef __PPU__
+    // PS3: always full screen; WIDESCREEN and SHOW FPS here
+    itemOptionsDisplayModeVSync.m_nY = 80;
+    itemOptionsDisplayModeFrameLimit.m_nY = 90;
+    itemOptionsDisplayBoolWidescreen.m_nY = 100;
+# ifdef USE_OPENGL
+    menuOptionsDisplayMode.Add(&itemOptionsDisplayModeVSync, false);
+# endif
+    menuOptionsDisplayMode.Add(&itemOptionsDisplayModeFrameLimit, false);
+    menuOptionsDisplayMode.Add(&itemOptionsDisplayBoolWidescreen, false);
+    menuOptionsDisplayMode.Add(&itemOptionsDisplayModeShowFps, false);
+    itemOptionsDisplayModeShowFps.at20 = gShowFps != 0;
+#else
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeFullscreen, false);
 #ifdef USE_OPENGL
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeVSync, false);
 #endif
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeFrameLimit, false);
+#endif
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeApply, false);
     menuOptionsDisplayMode.Add(&itemBloodQAV, false);
 
@@ -1438,9 +1506,24 @@ void SetupOptionsMenu(void)
 void SetupControlsMenu(void)
 {
     menuOptionsControl.Add(&itemOptionsControlTitle, false);
+#ifdef __PPU__
+    // PS3: the DualShock 3 only (no keyboard nor mouse to set up), in the
+    // middle of the screen
+    itemOptionsControlJoystickButtons.m_pzText = "BUTTON SETUP";
+    itemOptionsControlJoystickButtons.m_nY = 70;
+    itemOptionsControlJoystickAxes.m_pzText = "STICK SETUP";
+    itemOptionsControlJoystickAxes.m_nY = 90;
+    itemOptionsControlJoystickMisc.m_pzText = "CONTROLLER OPTIONS";
+    itemOptionsControlJoystickMisc.m_nY = 110;
+    itemJoyButtonsTitle.m_pzText = "BUTTON SETUP";
+    itemJoyAxesTitle.m_pzText = "STICK SETUP";
+    itemOptionsControlJoystickMiscTitle.m_pzText = "CONTROLLER";
+    menuOptionsControl.Add(&itemOptionsControlJoystickButtons, true);
+#else
     menuOptionsControl.Add(&itemOptionsControlKeyboard, true);
     menuOptionsControl.Add(&itemOptionsControlMouse, false);
     menuOptionsControl.Add(&itemOptionsControlJoystickButtons, false);
+#endif
     menuOptionsControl.Add(&itemOptionsControlJoystickAxes, false);
     menuOptionsControl.Add(&itemOptionsControlJoystickMisc, false);
     menuOptionsControl.Add(&itemBloodQAV, false);
@@ -1497,6 +1580,22 @@ void SetupJoystickMenu(void)
     itemOptionsControlJoystickMiscCenterView.at20 = gCenterViewOnDrop;
     itemOptionsControlJoystickMiscRumble.at20 = gSetup.joystickrumble;
 
+#ifdef __PPU__
+    // PS3: one press per button (no "Double ..."), START and PS out (the
+    // menu, the XMB), L2 / R2 in (the triggers' digital "+"): one page
+    {
+        int y = 35;
+        menuOptionsControlJoystickButtonAssignment[0].Add(&itemJoyButtonsTitle, false);
+        for (int n = 0; n < kPS3MenuButtons; n++)
+        {
+            pItemOptionsControlJoyButton[0][n] = new CGameMenuItemZCycle(PS3_ButtonName(nPS3MenuButtons[n]), 3, 66, y, 180, 0, SetJoyButton, pzGamefuncsStrings, nGamefuncsNum, 0, true);
+            menuOptionsControlJoystickButtonAssignment[0].Add(pItemOptionsControlJoyButton[0][n], n == 0);
+            y += 9;
+        }
+        menuOptionsControlJoystickButtonAssignment[0].Add(&itemBloodQAV, false);
+    }
+    int i = 0, y = 0;
+#else
     int i = 0, y = 0;
     for (int nButton = 0; nButton < joystick.numButtons; nButton++) // store every joystick button/hat name for button list at launch
     {
@@ -1517,9 +1616,15 @@ void SetupJoystickMenu(void)
         Bsnprintf(MenuJoyButtonNames[i++], 64, "Double %s", pzButtonName);
     }
     const int nMaxJoyButtons = i;
+#endif
 
     i = 0;
+#ifdef __PPU__
+    // PS3: the two sticks (L2 / R2 are buttons, above)
+    for (int nAxis = 0; nAxis < min(joystick.numAxes, 4); nAxis++)
+#else
     for (int nAxis = 0; nAxis < joystick.numAxes; nAxis++) // store every joystick axes for axes list at launch
+#endif
     {
         const char *pzAxisName = joyGetName(0, nAxis);
         if (pzAxisName == NULL) // if we've ran out of axes names, stop
@@ -1528,6 +1633,7 @@ void SetupJoystickMenu(void)
     }
     const int nMaxJoyAxes = i;
 
+#ifndef __PPU__
     if (nMaxJoyButtons <= 0) // joystick has no buttons, disable button menu
     {
         itemOptionsControlJoystickButtons.bEnable = 0;
@@ -1558,6 +1664,7 @@ void SetupJoystickMenu(void)
             menuOptionsControlJoystickButtonAssignment[nPage].Add(&itemBloodQAV, false);
         }
     }
+#endif
 
     if (nMaxJoyAxes <= 0) // joystick has no axes, disable axis menu
     {
@@ -1599,6 +1706,23 @@ void SetupJoystickMenu(void)
         pItemOptionsControlJoystickAxisAnalogueInvert[nAxis] = new CGameMenuItemZBool("ANALOG INVERT:", 1, 18, y, 280, false, SetJoystickAnalogueInvert, NULL, NULL); // get analog function
         dassert(pItemOptionsControlJoystickAxisAnalogueInvert[nAxis] != NULL);
         menuOptionsControlJoystickAxis[nAxis].Add(pItemOptionsControlJoystickAxisAnalogueInvert[nAxis], false);
+#ifdef __PPU__
+        y += 8;
+#endif
+#ifdef __PPU__
+        // PS3: a stick has no "digital" use here (the menus have the
+        // d-pad); the dead zone and the saturation in mact's own units
+        // (out of 10000, JOYSTICK_SetDeadZone): the PC menu kept them as
+        // fractions in 16.16 (0.25 = 16384), past 10000, so moving the
+        // slider made the whole stick dead
+        pItemOptionsControlJoystickAxisDigitalPos[nAxis] = new CGameMenuItemZCycle("DIGITAL +:", 1, 18, y, 280, 0, SetJoystickDigitalPos, pzGamefuncsStrings, nGamefuncsNum, 0, true);
+        pItemOptionsControlJoystickAxisDigitalNeg[nAxis] = new CGameMenuItemZCycle("DIGITAL -:", 1, 18, y, 280, 0, SetJoystickDigitalNeg, pzGamefuncsStrings, nGamefuncsNum, 0, true);
+        y += 25;
+        pItemOptionsControlJoystickAxisDeadzone[nAxis] = new CGameMenuItemSlider("DEAD ZONE:", 1, 18, y, 280, &JoystickAnalogueDead[nAxis], 0, 5000, 250, SetJoystickDeadzone, -1, -1, kMenuSlider10k);
+        menuOptionsControlJoystickAxis[nAxis].Add(pItemOptionsControlJoystickAxisDeadzone[nAxis], false);
+        y += 17;
+        pItemOptionsControlJoystickAxisSaturate[nAxis] = new CGameMenuItemSlider("SATURATE:", 1, 18, y, 280, &JoystickAnalogueSaturate[nAxis], 5000, 10000, 250, SetJoystickSaturate, -1, -1, kMenuSlider10k);
+#else
         y += 17;
         pItemOptionsControlJoystickAxisDigitalPos[nAxis] = new CGameMenuItemZCycle("DIGITAL +:", 1, 18, y, 280, 0, SetJoystickDigitalPos, pzGamefuncsStrings, NUMGAMEFUNCTIONS+1, 0, true); // get digital function
         dassert(pItemOptionsControlJoystickAxisDigitalPos[nAxis] != NULL);
@@ -1613,6 +1737,7 @@ void SetupJoystickMenu(void)
         menuOptionsControlJoystickAxis[nAxis].Add(pItemOptionsControlJoystickAxisDeadzone[nAxis], false);
         y += 17;
         pItemOptionsControlJoystickAxisSaturate[nAxis] = new CGameMenuItemSlider("SATURATE:", 1, 18, y, 280, &JoystickAnalogueSaturate[nAxis], fix16_from_int(0), fix16_from_float(0.5f), fix16_from_float(0.025f), SetJoystickSaturate, -1, -1, kMenuSliderPercent); // get saturate
+#endif
         dassert(pItemOptionsControlJoystickAxisSaturate[nAxis] != NULL);
         menuOptionsControlJoystickAxis[nAxis].Add(pItemOptionsControlJoystickAxisSaturate[nAxis], false);
         menuOptionsControlJoystickAxis[nAxis].Add(&itemBloodQAV, false);
@@ -1633,6 +1758,12 @@ void SetupMenus(void)
             if (MenuGameFuncs[i][j] == '_')
                 MenuGameFuncs[i][j] = ' ';
 
+#ifdef __PPU__
+        // PS3: nothing that needs a keyboard, a mouse or other players
+        if (i == gamefunc_Mouse_Aiming || i == gamefunc_Send_Message || i == gamefunc_Show_Console
+            || i == gamefunc_See_Coop_View || i == gamefunc_Show_Opponents_Weapon || i == gamefunc_Strafe)
+            continue;
+#endif
         if (gamefunctions[i][0] != '\0')
         {
             pzGamefuncsStrings[k] = MenuGameFuncs[i];
@@ -2001,6 +2132,13 @@ void SetWidescreen(CGameMenuItemZBool *pItem)
     r_usenewaspect = pItem->at20;
 }
 
+#ifdef __PPU__
+void SetShowFps(CGameMenuItemZBool *pItem)
+{
+    gShowFps = pItem->at20;
+}
+#endif
+
 void SetFOV(CGameMenuItemSlider *pItem)
 {
     gFov = pItem->nValue;
@@ -2018,6 +2156,10 @@ void SetupVideoModeMenu(CGameMenuItemChain *pItem)
         }
     }
     itemOptionsDisplayModeFullscreen.at20 = gSetup.fullscreen;
+#ifdef __PPU__
+    itemOptionsDisplayModeShowFps.at20 = gShowFps != 0;
+    itemOptionsDisplayBoolWidescreen.at20 = r_usenewaspect;
+#endif
 #ifdef USE_OPENGL
     for (int i = 0; i < 2; i++)
     {
@@ -2243,6 +2385,30 @@ void UpdateCDToggle(CGameMenuItemZBool *pItem)
         levelTryPlayMusicOrNothing(gGameOptions.nEpisode, gGameOptions.nLevel);
 }
 
+#ifdef __PPU__
+static int PS3_VolumeFromPercent(int nPercent)
+{
+    return (ClipRange(nPercent, 0, 100) * 255 + 50) / 100;
+}
+
+static int PS3_PercentFromVolume(int nVolume)
+{
+    int const nPercent = (ClipRange(nVolume, 0, 255) * 100 + 127) / 255;
+    return (nPercent + 2) / 5 * 5;
+}
+
+void UpdateSoundVolume(CGameMenuItemSlider *pItem)
+{
+    nPS3SoundVolume = pItem->nValue;
+    sndSetFXVolume(PS3_VolumeFromPercent(pItem->nValue));
+}
+
+void UpdateMusicVolume(CGameMenuItemSlider *pItem)
+{
+    nPS3MusicVolume = pItem->nValue;
+    sndSetMusicVolume(PS3_VolumeFromPercent(pItem->nValue));
+}
+#else
 void UpdateSoundVolume(CGameMenuItemSlider *pItem)
 {
     sndSetFXVolume(pItem->nValue);
@@ -2252,6 +2418,7 @@ void UpdateMusicVolume(CGameMenuItemSlider *pItem)
 {
     sndSetMusicVolume(pItem->nValue);
 }
+#endif
 
 void UpdateSoundRate(CGameMenuItemZCycle *pItem)
 {
@@ -2316,6 +2483,11 @@ void SetupOptionsSound(CGameMenuItemChain *pItem)
         }
     }
     itemOptionsSoundNumVoices.nValue = NumVoices;
+#ifdef __PPU__
+    nPS3SoundVolume = PS3_PercentFromVolume(FXVolume);
+    nPS3MusicVolume = PS3_PercentFromVolume(MusicVolume);
+    Bstrncpyz(sf2bankfile, SF2_BankFile, sizeof(sf2bankfile));
+#endif
     itemOptionsSoundMusicDevice.m_nFocus = 0;
     for (int i = 0; i < (int)ARRAY_SIZE(nMusicDeviceValues); i++)
     {
@@ -2381,6 +2553,25 @@ void SetupMouseMenu(CGameMenuItemChain *pItem)
 void SetupJoystickButtonsMenu(CGameMenuItemChain *pItem)
 {
     UNREFERENCED_PARAMETER(pItem);
+#ifdef __PPU__
+    for (int n = 0; n < kPS3MenuButtons; n++)
+    {
+        auto pButton = pItemOptionsControlJoyButton[0][n];
+        if (!pButton)
+            return;
+        int const nFunc = PS3_MenuButtonFunction(nPS3MenuButtons[n]);
+        pButton->m_nFocus = 0;
+        for (int j = 0; j < nGamefuncsNum; j++)
+        {
+            if (nFunc == nGamefuncsValues[j])
+            {
+                pButton->m_nFocus = j;
+                break;
+            }
+        }
+    }
+    return;
+#endif
     const int nMaxJoyButtons = (joystick.numButtons * 2) + ((joystick.numHats > 0) * 4);
     for (int nPage = 0; nPage < MAXJOYSTICKBUTTONPAGES; nPage++) // go through each axis and setup binds
     {
@@ -2602,6 +2793,28 @@ void SetMouseButton(CGameMenuItemZCycle *pItem)
 
 void SetJoyButton(CGameMenuItemZCycle *pItem)
 {
+#ifdef __PPU__
+    for (int n = 0; n < kPS3MenuButtons; n++)
+    {
+        if (pItem != pItemOptionsControlJoyButton[0][n])
+            continue;
+        int const nButton = nPS3MenuButtons[n];
+        int const nFunc = nGamefuncsValues[pItem->m_nFocus];
+        if (nButton >= 15) // L2 / R2: the trigger axis' digital "+"
+        {
+            int const nAxis = nButton == 15 ? 4 : 5;
+            JoystickDigitalFunctions[nAxis][1] = nFunc;
+            CONTROL_MapDigitalAxis(nAxis, nFunc, 1);
+        }
+        else
+        {
+            JoystickFunctions[nButton][0] = nFunc;
+            CONTROL_MapButton(nFunc, nButton, 0, controldevice_joystick);
+        }
+        return;
+    }
+    return;
+#endif
     for (int nPage = 0; nPage < MAXJOYSTICKBUTTONPAGES; nPage++) // find selected menu item used for this bind
     {
         for (int nButton = 0; nButton < JOYSTICKITEMSPERPAGE; nButton++)
@@ -2772,6 +2985,9 @@ void SaveGame(CGameMenuItemZEditBitmap *pItem, CGameMenuEvent *event)
     memset(gGameOptions.szSaveGameName, 0, sizeof(gGameOptions.szSaveGameName));
     sprintf(gGameOptions.szSaveGameName, "%s", strSaveGameName);
     gGameOptions.nSaveGameSlot = nSlot;
+#ifdef __PPU__
+    PS3_SaveShot(nSlot);
+#endif
     viewLoadingScreen(gMenuPicnum, "Saving", "Saving Your Game", strRestoreGameStrings[nSlot]);
     videoNextPage();
     gSaveGameNum = nSlot;
@@ -2803,6 +3019,9 @@ void QuickSaveGame(void)
     memset(gGameOptions.szSaveGameName, 0, sizeof(gGameOptions.szSaveGameName));
     sprintf(gGameOptions.szSaveGameName, "%s", strSaveGameName);
     gGameOptions.nSaveGameSlot = gQuickSaveSlot;
+#ifdef __PPU__
+    PS3_SaveShot(gQuickSaveSlot);
+#endif
     viewLoadingScreen(gMenuPicnum, "Saving", "Saving Your Game", strRestoreGameStrings[gQuickSaveSlot]);
     videoNextPage();
     LoadSave::SaveGame(strSaveGameName);
