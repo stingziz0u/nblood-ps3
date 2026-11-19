@@ -104,6 +104,9 @@ public:
     DICTNODE *Lookup(unsigned int id, const char *type);
     void Read(DICTNODE *n);
     void Read(DICTNODE *n, void *p);
+#if B_BIG_ENDIAN == 1
+    void Swap(DICTNODE *n, void *p);   // PS3: little-endian data to ours
+#endif
     void *Load(DICTNODE *h);
     void *Load(DICTNODE *h, void *p);
     void *Lock(DICTNODE *h);

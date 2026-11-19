@@ -779,123 +779,133 @@ void Resource::Read(DICTNODE *n, void *p)
             }
             Crypt(p, size, 0);
         }
+    }
 #if B_BIG_ENDIAN == 1
-        if (!Bstrcmp(n->type, "QAV"))
+    // every source: the RFFs, but also nblood.pk3 (NEWCANDOWN2.QAV, read
+    // unswapped its frame count was in the millions: WeaponPrecache ran far
+    // past it and the game died starting a level) and loose files in addons
+    Swap(n, p);
+#endif
+}
+
+#if B_BIG_ENDIAN == 1
+void Resource::Swap(DICTNODE *n, void *p)
+{
+    if (!Bstrcmp(n->type, "QAV"))
+    {
+        QAV *qav = (QAV*)p;
+        qav->nFrames = B_LITTLE32(qav->nFrames);
+        qav->ticksPerFrame = B_LITTLE32(qav->ticksPerFrame);
+        qav->at10 = B_LITTLE32(qav->at10);
+        qav->x = B_LITTLE32(qav->x);
+        qav->y = B_LITTLE32(qav->y);
+        qav->nSprite = B_LITTLE32(qav->nSprite);
+        int nFrames = qav->nFrames;
+        int const nRoom = ((int)n->size - (int)offsetof(QAV, frames)) / (int)sizeof(FRAMEINFO);
+        if (nFrames > nRoom || nFrames < 0)
         {
-            QAV *qav = (QAV*)p;
-            qav->nFrames = B_LITTLE32(qav->nFrames);
-            qav->ticksPerFrame = B_LITTLE32(qav->ticksPerFrame);
-            qav->at10 = B_LITTLE32(qav->at10);
-            qav->x = B_LITTLE32(qav->x);
-            qav->y = B_LITTLE32(qav->y);
-            qav->nSprite = B_LITTLE32(qav->nSprite);
-            int nFrames = qav->nFrames;
-            int const nRoom = ((int)n->size - (int)offsetof(QAV, frames)) / (int)sizeof(FRAMEINFO);
-            if (nFrames > nRoom || nFrames < 0)
+            // never write past the resource's end (on little-endian
+            // nothing is written here at all)
+            LOG_F(WARNING, "QAV %s (id %u): %d frames in %u bytes, swapping %d",
+                  n->name, n->id, nFrames, n->size, nRoom < 0 ? 0 : nRoom);
+            nFrames = nRoom < 0 ? 0 : nRoom;
+        }
+        for (int i = 0; i < nFrames; i++)
+        {
+            FRAMEINFO *pFrame = &qav->frames[i];
+            SOUNDINFO *pSound = &pFrame->sound;
+            pFrame->nCallbackId = B_LITTLE32(pFrame->nCallbackId);
+            pSound->sound = B_LITTLE32(pSound->sound);
+            for (int j = 0; j < 8; j++)
             {
-                // never write past the resource's end (on little-endian
-                // nothing is written here at all)
-                LOG_F(WARNING, "QAV %s (id %u): %d frames in %u bytes, swapping %d",
-                      n->name, n->id, nFrames, n->size, nRoom < 0 ? 0 : nRoom);
-                nFrames = nRoom < 0 ? 0 : nRoom;
-            }
-            for (int i = 0; i < nFrames; i++)
-            {
-                FRAMEINFO *pFrame = &qav->frames[i];
-                SOUNDINFO *pSound = &pFrame->sound;
-                pFrame->nCallbackId = B_LITTLE32(pFrame->nCallbackId);
-                pSound->sound = B_LITTLE32(pSound->sound);
-                for (int j = 0; j < 8; j++)
-                {
-                    TILE_FRAME *pTile = &pFrame->tiles[j];
-                    pTile->picnum = B_LITTLE32(pTile->picnum);
-                    pTile->x = B_LITTLE32(pTile->x);
-                    pTile->y = B_LITTLE32(pTile->y);
-                    pTile->z = B_LITTLE32(pTile->z);
-                    pTile->stat = B_LITTLE32(pTile->stat);
-                    pTile->angle = B_LITTLE16(pTile->angle);
-                }
+                TILE_FRAME *pTile = &pFrame->tiles[j];
+                pTile->picnum = B_LITTLE32(pTile->picnum);
+                pTile->x = B_LITTLE32(pTile->x);
+                pTile->y = B_LITTLE32(pTile->y);
+                pTile->z = B_LITTLE32(pTile->z);
+                pTile->stat = B_LITTLE32(pTile->stat);
+                pTile->angle = B_LITTLE16(pTile->angle);
             }
         }
-        else if (!Bstrcmp(n->type, "SEQ"))
+    }
+    else if (!Bstrcmp(n->type, "SEQ"))
+    {
+        Seq *pSeq = (Seq*)p;
+        pSeq->version = B_LITTLE16(pSeq->version);
+        pSeq->nFrames = B_LITTLE16(pSeq->nFrames);
+        pSeq->ticksPerFrame = B_LITTLE16(pSeq->ticksPerFrame);
+        pSeq->nSoundID = B_LITTLE16(pSeq->nSoundID);
+        pSeq->flags = B_LITTLE32(pSeq->flags);
+        int nFrames = pSeq->nFrames;
+        int const nRoom = ((int)n->size - (int)offsetof(Seq, frames)) / (int)sizeof(SEQFRAME);
+        if (nFrames > nRoom || nFrames < 0)
         {
-            Seq *pSeq = (Seq*)p;
-            pSeq->version = B_LITTLE16(pSeq->version);
-            pSeq->nFrames = B_LITTLE16(pSeq->nFrames);
-            pSeq->ticksPerFrame = B_LITTLE16(pSeq->ticksPerFrame);
-            pSeq->nSoundID = B_LITTLE16(pSeq->nSoundID);
-            pSeq->flags = B_LITTLE32(pSeq->flags);
-            int nFrames = pSeq->nFrames;
-            int const nRoom = ((int)n->size - (int)offsetof(Seq, frames)) / (int)sizeof(SEQFRAME);
-            if (nFrames > nRoom || nFrames < 0)
-            {
-                LOG_F(WARNING, "SEQ %s (id %u): %d frames in %u bytes, swapping %d",
-                      n->name, n->id, nFrames, n->size, nRoom < 0 ? 0 : nRoom);
-                nFrames = nRoom < 0 ? 0 : nRoom;
-            }
-            for (int i = 0; i < nFrames; i++)
-            {
-                SEQFRAME *pFrame = &pSeq->frames[i];
-                BitReader bitReader((char *)pFrame, sizeof(SEQFRAME));
-                SEQFRAME swapFrame;
-                swapFrame.tile = bitReader.readUnsigned(12);
-                swapFrame.transparent = bitReader.readBit();
-                swapFrame.transparent2 = bitReader.readBit();
-                swapFrame.blockable = bitReader.readBit();
-                swapFrame.hittable = bitReader.readBit();
-                swapFrame.xrepeat = bitReader.readUnsigned(8);
-                swapFrame.yrepeat = bitReader.readUnsigned(8);
-                swapFrame.shade = bitReader.readSigned(8);
-                swapFrame.pal = bitReader.readUnsigned(5);
-                swapFrame.trigger = bitReader.readBit();
-                swapFrame.smoke = bitReader.readBit();
-                swapFrame.autoaim = bitReader.readBit();
-                swapFrame.pushable = bitReader.readBit();
-                swapFrame.playSound = bitReader.readBit();
-                swapFrame.invisible = bitReader.readBit();
-                swapFrame.xflip = bitReader.readBit();
-                swapFrame.yflip = bitReader.readBit();
-                swapFrame.tile2 = bitReader.readUnsigned(4);
+            LOG_F(WARNING, "SEQ %s (id %u): %d frames in %u bytes, swapping %d",
+                  n->name, n->id, nFrames, n->size, nRoom < 0 ? 0 : nRoom);
+            nFrames = nRoom < 0 ? 0 : nRoom;
+        }
+        for (int i = 0; i < nFrames; i++)
+        {
+            SEQFRAME *pFrame = &pSeq->frames[i];
+            BitReader bitReader((char *)pFrame, sizeof(SEQFRAME));
+            SEQFRAME swapFrame;
+            swapFrame.tile = bitReader.readUnsigned(12);
+            swapFrame.transparent = bitReader.readBit();
+            swapFrame.transparent2 = bitReader.readBit();
+            swapFrame.blockable = bitReader.readBit();
+            swapFrame.hittable = bitReader.readBit();
+            swapFrame.xrepeat = bitReader.readUnsigned(8);
+            swapFrame.yrepeat = bitReader.readUnsigned(8);
+            swapFrame.shade = bitReader.readSigned(8);
+            swapFrame.pal = bitReader.readUnsigned(5);
+            swapFrame.trigger = bitReader.readBit();
+            swapFrame.smoke = bitReader.readBit();
+            swapFrame.autoaim = bitReader.readBit();
+            swapFrame.pushable = bitReader.readBit();
+            swapFrame.playSound = bitReader.readBit();
+            swapFrame.invisible = bitReader.readBit();
+            swapFrame.xflip = bitReader.readBit();
+            swapFrame.yflip = bitReader.readBit();
+            swapFrame.tile2 = bitReader.readUnsigned(4);
 #ifdef NOONE_EXTENSIONS
-                swapFrame.soundRange = bitReader.readUnsigned(4);
-                swapFrame.surfaceSound = bitReader.readBit();
-                swapFrame.pal2 = bitReader.readUnsigned(2);
+            swapFrame.soundRange = bitReader.readUnsigned(4);
+            swapFrame.surfaceSound = bitReader.readBit();
+            swapFrame.pal2 = bitReader.readUnsigned(2);
 #else
-                swapFrame.reserved = bitReader.readUnsigned(7);
+            swapFrame.reserved = bitReader.readUnsigned(7);
 #endif
-                *pFrame = swapFrame;
-            }
+            *pFrame = swapFrame;
         }
-        else if (!Bstrcmp(n->type, "SFX"))
-        {
-            SFX *pSFX = (SFX*)p;
-            pSFX->relVol = B_LITTLE32(pSFX->relVol);
-            pSFX->pitch = B_LITTLE32(pSFX->pitch);
-            pSFX->pitchRange = B_LITTLE32(pSFX->pitchRange);
-            pSFX->format = B_LITTLE32(pSFX->format);
-            pSFX->loopStart = B_LITTLE32(pSFX->loopStart);
-        }
-        else if (!Bstrcmp(n->type, "QFN") && n->size >= offsetof(QFONT, at820))
-        {
-            // the HUD/menu fonts: each glyph's offset into the font's
-            // bitmap data (read as-is it pointed far outside the font)
-            QFONT *pFont = (QFONT*)p;
-            pFont->at6 = B_LITTLE16(pFont->at6);
-            for (int i = 0; i < 256; i++)
-                pFont->at20[i].offset = B_LITTLE32(pFont->at20[i].offset);
-        }
-        else if (!Bstrcmp(n->type, "QBM") && n->size >= offsetof(QBITMAP, atc))
-        {
-            QBITMAP *pQBM = (QBITMAP*)p;
-            pQBM->at2 = B_LITTLE16(pQBM->at2);
-            pQBM->at4 = B_LITTLE16(pQBM->at4);
-            pQBM->at6 = B_LITTLE16(pQBM->at6);
-            pQBM->at8 = B_LITTLE16(pQBM->at8);
-            pQBM->ata = B_LITTLE16(pQBM->ata);
-        }
-#endif
+    }
+    else if (!Bstrcmp(n->type, "SFX"))
+    {
+        SFX *pSFX = (SFX*)p;
+        pSFX->relVol = B_LITTLE32(pSFX->relVol);
+        pSFX->pitch = B_LITTLE32(pSFX->pitch);
+        pSFX->pitchRange = B_LITTLE32(pSFX->pitchRange);
+        pSFX->format = B_LITTLE32(pSFX->format);
+        pSFX->loopStart = B_LITTLE32(pSFX->loopStart);
+    }
+    else if (!Bstrcmp(n->type, "QFN") && n->size >= offsetof(QFONT, at820))
+    {
+        // the HUD/menu fonts: each glyph's offset into the font's
+        // bitmap data (read as-is it pointed far outside the font)
+        QFONT *pFont = (QFONT*)p;
+        pFont->at6 = B_LITTLE16(pFont->at6);
+        for (int i = 0; i < 256; i++)
+            pFont->at20[i].offset = B_LITTLE32(pFont->at20[i].offset);
+    }
+    else if (!Bstrcmp(n->type, "QBM") && n->size >= offsetof(QBITMAP, atc))
+    {
+        QBITMAP *pQBM = (QBITMAP*)p;
+        pQBM->at2 = B_LITTLE16(pQBM->at2);
+        pQBM->at4 = B_LITTLE16(pQBM->at4);
+        pQBM->at6 = B_LITTLE16(pQBM->at6);
+        pQBM->at8 = B_LITTLE16(pQBM->at8);
+        pQBM->ata = B_LITTLE16(pQBM->ata);
     }
 }
+#endif
 
 void *Resource::Load(DICTNODE *h)
 {
