@@ -51,6 +51,10 @@ char    g_controllerSupportFlags;
 int32_t r_maxfps = -1;
 uint64_t g_frameDelay;
 
+#ifdef __PPU__
+int32_t vid_ps3_screenfit = 90;
+#endif
+
 
 //
 // initprintf() -- prints a formatted string to the initialization window
@@ -814,6 +818,9 @@ int32_t baselayer_init(void)
         { "lz4compressionlevel","adjust LZ4 compression level used for savegames",(void *) &lz4CompressionLevel, CVAR_INT, 1, 32 },
         { "r_borderless", "borderless windowed mode: 0: never  1: always  2: if resolution matches desktop", (void *) &r_borderless, CVAR_INT|CVAR_RESTARTVID, 0, 2 },
         { "r_usenewaspect","enable/disable new screen aspect ratio determination code",(void *) &r_usenewaspect, CVAR_BOOL, 0, 1 },
+#ifdef __PPU__
+        { "vid_ps3_screenfit", "PS3: percentage of the TV the picture uses (overscan)", (void *)&vid_ps3_screenfit, CVAR_INT, 70, 100 },
+#endif
         { "r_screenaspect","if using r_usenewaspect and in fullscreen, screen aspect ratio in the form XXYY, e.g. 1609 for 16:9",
           (void *) &r_screenxy, SCREENASPECT_CVAR_TYPE, 0, 9999 },
         { "r_fpgrouscan","use floating-point numbers for slope rendering",(void *) &r_fpgrouscan, CVAR_BOOL, 0, 1 },

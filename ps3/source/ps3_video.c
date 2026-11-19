@@ -69,6 +69,16 @@ PS3_UserMemory(ps3_user_mem_t *info)
 	return_to_user_prog(s32);
 }
 
+/* what the system has left, in KB (the SoundFont's check, driver_sf2.cpp) */
+unsigned
+PS3_SystemFreeKB(void)
+{
+	ps3_user_mem_t um = { 0, 0 };
+
+	PS3_UserMemory(&um);
+	return um.available / 1024;
+}
+
 /* in the log with the frame rate: the heap and what the system has left */
 static void
 LogMemory(void)
@@ -83,11 +93,27 @@ LogMemory(void)
 			(unsigned)(um.total / 1024));
 }
 
+/* the same, said where (the level start's steps, blood.cpp) */
+void
+PS3_LogMemoryAt(const char *where)
+{
+	struct mallinfo const mi = mallinfo();
+	ps3_user_mem_t um = { 0, 0 };
+
+	PS3_UserMemory(&um);
+	PS3_Log("[mem] %s: heap in use %u KB; system: %u KB free",
+			where, (unsigned)(mi.uordblks / 1024), (unsigned)(um.available / 1024));
+}
+
 
 #define FB_COUNT      3
 #define FB_ALIGN      64
 #define RSX_CB_SIZE   (1 * 1024 * 1024)     /* command buffer */
-#define RSX_IO_SIZE   (32 * 1024 * 1024)    /* IO buffer (Doom64-PS3 value) */
+/* IO buffer: main memory the RSX reads, for the command buffer (its first
+   1 MB) and nothing else here; 4 MB leaves the RSX library a margin. It
+   was Doom64-PS3's 32 MB, 31 of them unused, out of the game's 213: with
+   a SoundFont (33 MB) Blood's level start ran out of memory. */
+#define RSX_IO_SIZE   (4 * 1024 * 1024)
 
 static gcmContextData *ctx;
 static void *io_buffer;
@@ -179,8 +205,8 @@ VBlankHandler(const u32 head)
 /* A piece of the IO buffer (main memory the RSX can write) for reading
    the picture back (glReadPixels): 8 MB past its start, the command buffer
    is the first 1 MB and nothing else uses the rest. */
-#define IO_SCRATCH_OFF  (8u * 1024 * 1024)
-#define IO_SCRATCH_SIZE (8u * 1024 * 1024)
+#define IO_SCRATCH_OFF  RSX_CB_SIZE
+#define IO_SCRATCH_SIZE (RSX_IO_SIZE - RSX_CB_SIZE)   /* (nothing uses it now) */
 
 int
 PS3_Video_IOScratch(unsigned size, void **ptr, unsigned *offset)

@@ -555,7 +555,21 @@ CGameMenuItemZCycle itemOptionsDisplayModeFrameLimit("FRAMERATE LIMIT:", 3, 66, 
 CGameMenuItemChain itemOptionsDisplayModeApply("APPLY CHANGES", 3, 66, 125, 180, 0, NULL, 0, SetVideoMode, 0);
 #ifdef __PPU__
 void SetShowFps(CGameMenuItemZBool *pItem);
+void SetPS3TextureFilter(CGameMenuItemZCycle *pItem);
+void SetPS3ScreenFit(CGameMenuItemSlider *pItem);
 CGameMenuItemZBool itemOptionsDisplayModeShowFps("SHOW FPS:", 3, 66, 110, 180, 0, SetShowFps, NULL, NULL);
+// Polymost's six filters (gltexfiltermode: GL_NEAREST ... GL_LINEAR_MIPMAP_LINEAR)
+const char *pzPS3TextureFilterStrings[] = {
+    "NONE",
+    "BILINEAR",
+    "NONE, MIPMAPS",
+    "BILINEAR, MIPMAPS",
+    "NONE, SMOOTH MIPMAPS",
+    "TRILINEAR",
+};
+CGameMenuItemZCycle itemOptionsDisplayModeTextureFilter("TEXTURE FILTER:", 3, 66, 120, 180, 0, SetPS3TextureFilter, pzPS3TextureFilterStrings, ARRAY_SSIZE(pzPS3TextureFilterStrings), 0);
+// the TV's overscan: the percentage of the screen the picture uses (VoidSW's)
+CGameMenuItemSlider itemOptionsDisplayModeScreenFit("TV SCREEN FIT:", 3, 66, 130, 180, &vid_ps3_screenfit, 70, 100, 1, SetPS3ScreenFit, -1, -1, kMenuSliderValue);
 #endif
 
 void PreDrawDisplayColor(CGameMenuItem *);
@@ -1043,7 +1057,17 @@ void SetupMainMenu(void)
         itemMain1.at24 = &menuEpisode;
         itemMain1.at28 = -1;
     }
+#ifdef __PPU__
+    // PS3: no MULTIPLAYER (single player only), the rest spread over its place
+    itemMain1.m_nY = 55;
+    itemMain3.m_nY = 75;
+    itemMain4.m_nY = 95;
+    itemMain5.m_nY = 115;
+    itemMain6.m_nY = 135;
+    itemMain7.m_nY = 155;
+#else
     menuMain.Add(&itemMain2, false);
+#endif
     menuMain.Add(&itemMain3, false);
     menuMain.Add(&itemMain4, false);
     menuMain.Add(&itemMain5, false);
@@ -1431,6 +1455,9 @@ void SetupOptionsMenu(void)
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeFrameLimit, false);
     menuOptionsDisplayMode.Add(&itemOptionsDisplayBoolWidescreen, false);
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeShowFps, false);
+    menuOptionsDisplayMode.Add(&itemOptionsDisplayModeTextureFilter, false);
+    menuOptionsDisplayMode.Add(&itemOptionsDisplayModeScreenFit, false);
+    itemOptionsDisplayModeApply.m_nY = 145;
     itemOptionsDisplayModeShowFps.at20 = gShowFps != 0;
 #else
     menuOptionsDisplayMode.Add(&itemOptionsDisplayModeFullscreen, false);
@@ -2137,6 +2164,20 @@ void SetShowFps(CGameMenuItemZBool *pItem)
 {
     gShowFps = pItem->at20;
 }
+
+void SetPS3TextureFilter(CGameMenuItemZCycle *pItem)
+{
+    // as VoidSW's: the art's textures made again for the new filter (the
+    // unfiltered ones are the palette-indexed kind), then the filter applied
+    gltexfiltermode = ClipRange(pItem->m_nFocus, 0, 5);
+    gltexinvalidatetype(INVALIDATE_ART);
+    gltexapplyprops();
+}
+
+void SetPS3ScreenFit(CGameMenuItemSlider *pItem)
+{
+    vid_ps3_screenfit = ClipRange(pItem->nValue, 70, 100);   // ps3layer.cpp gives it to the video every frame
+}
 #endif
 
 void SetFOV(CGameMenuItemSlider *pItem)
@@ -2159,6 +2200,7 @@ void SetupVideoModeMenu(CGameMenuItemChain *pItem)
 #ifdef __PPU__
     itemOptionsDisplayModeShowFps.at20 = gShowFps != 0;
     itemOptionsDisplayBoolWidescreen.at20 = r_usenewaspect;
+    itemOptionsDisplayModeTextureFilter.m_nFocus = ClipRange(gltexfiltermode, 0, 5);
 #endif
 #ifdef USE_OPENGL
     for (int i = 0; i < 2; i++)

@@ -603,8 +603,16 @@ int gChokeCounter[kMaxPlayers];
 vec3_t startpos;
 int16_t startang, startsectnum;
 
+#ifdef __PPU__
+// what a level start takes of the memory, step by step (the log)
+extern "C" void PS3_LogMemoryAt(const char *where);
+#endif
+
 void StartLevel(GAMEOPTIONS *pOpt)
 {
+#ifdef __PPU__
+    PS3_LogMemoryAt("level start");
+#endif
     EndLevel();
     gInput = {};
     gStartNewGame = 0;
@@ -682,6 +690,9 @@ void StartLevel(GAMEOPTIONS *pOpt)
         return;
     }
     PS3_CRUMB("StartLevel", 2);   // map loaded
+#ifdef __PPU__
+    PS3_LogMemoryAt("map loaded");
+#endif
     char levelName[BMAX_PATH];
     G_LoadMapHack(levelName, pOpt->zLevelName);
     wsrand(pOpt->uMapCRC);
@@ -803,8 +814,14 @@ void StartLevel(GAMEOPTIONS *pOpt)
     pOpt->uGameFlags &= ~(kGameFlagContinuing|kGameFlagEnding);
     scrSetDac();
     PS3_CRUMB("StartLevel", 8);
+#ifdef __PPU__
+    PS3_LogMemoryAt("actors and players set up");
+#endif
     PreloadCache();
     PS3_CRUMB("StartLevel", 9);
+#ifdef __PPU__
+    PS3_LogMemoryAt("precached");
+#endif
     InitMirrors();
     gFrameClock = 0;
     PS3_CRUMB("StartLevel", 10);
@@ -834,6 +851,9 @@ void StartLevel(GAMEOPTIONS *pOpt)
     gPaused = 0;
     gGameStarted = 1;
     PS3_CRUMB("StartLevel", 15);   // done
+#ifdef __PPU__
+    PS3_LogMemoryAt("level started");
+#endif
     ready2send = 1;
 }
 

@@ -68,6 +68,11 @@ extern char offscreenrendering;
 extern int32_t nofog;
 
 extern int32_t r_maxfps;
+#ifdef __PPU__
+// PS3: percentage of the TV the picture uses (overscan), 70..100; the
+// layer hands it to the video code every frame (ps3layer.cpp)
+extern int32_t vid_ps3_screenfit;
+#endif
 extern int32_t g_numdisplays;
 extern int32_t g_displayindex;
 

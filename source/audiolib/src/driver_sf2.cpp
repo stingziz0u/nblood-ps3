@@ -54,7 +54,14 @@ char        SF2_BankFile[BMAX_PATH];
  */
 extern "C" unsigned long long PS3_Micros(void);
 extern "C" void PS3_Log(const char *fmt, ...);
+extern "C" unsigned PS3_SystemFreeKB(void);
 #include <malloc.h>
+
+/* What has to stay free with the font loaded: a level start takes some
+   25 MB (Blood's E1M1), and then some. A font that doesn't leave it isn't
+   loaded (the music goes to the OPL3): out of memory the game died
+   starting a level. */
+#define PS3_SF2_RESERVE_KB (40 * 1024)
 
 /* the synth's lock and the music rendered ahead (see SF2Drv_MIDI_Service) */
 extern "C" {
@@ -302,6 +309,21 @@ static int SF2_LoadBank(char const *const filename)
         tsf_close(sf2_synth);
         sf2_synth = nullptr;
         PS3_SF2_Unlock();
+        {
+            // the samples are most of the file (they stay 16 bit); what's
+            // free: the system's and the heap's (newlib's heap never gives
+            // memory back: a font closed before stays in it)
+            unsigned const nNeedKB = (unsigned)(kfilelength(sf2_kfd) / 1024) + 1024;
+            unsigned const nFreeKB = PS3_SystemFreeKB() + (unsigned)(mallinfo().fordblks / 1024);
+
+            if (nFreeKB < nNeedKB + PS3_SF2_RESERVE_KB)
+            {
+                PS3_Log("[sf2] \"%s\" needs about %u MB and %u MB are free (%u must stay for the game): not loaded, the music goes to the OPL3",
+                        filename, nNeedKB / 1024, nFreeKB / 1024, PS3_SF2_RESERVE_KB / 1024);
+                kclose(sf2_kfd);
+                return SF2_Error;
+            }
+        }
         size_t const heap0 = mallinfo().uordblks;
 #else
         tsf_close(sf2_synth);

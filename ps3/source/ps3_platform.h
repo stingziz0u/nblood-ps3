@@ -83,6 +83,11 @@ void PS3_LogShutdown(void);
 /* ps3_debug.c: the trail of the game thread, written to the log when it
    dies (see the file) */
 void PS3_Crumb(const char *tag, int val);
+
+/* memory (ps3_video.c): what the system has left, in KB; the same and the
+   heap in the log, with where */
+unsigned PS3_SystemFreeKB(void);
+void PS3_LogMemoryAt(const char *where);
 void PS3_Debug_ThreadStart(unsigned stack_size);
 void PS3_Debug_Dump(const char *why);
 
