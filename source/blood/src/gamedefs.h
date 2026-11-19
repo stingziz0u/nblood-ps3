@@ -54,6 +54,11 @@ extern "C" {
 
 // default joystick settings
 
+// PS3: both sticks, every axis (config.cpp)
+#define PS3_JOYSTICKANALOGUESCALE           16384
+#define PS3_JOYSTICKANALOGUEDEAD            1000
+#define PS3_JOYSTICKANALOGUESATURATE        9500
+
 #if defined(GEKKO)
 #define DEFAULTJOYSTICKANALOGUESCALE        16384
 #define DEFAULTJOYSTICKANALOGUEDEAD         1000

@@ -380,7 +380,7 @@ glGetString(GLenum name)
 		case GL_VERSION:    return (const GLubyte *)"2.1 ps3gl";
 		case GL_EXTENSIONS: return (const GLubyte *)"GL_ARB_multitexture GL_ARB_texture_env_combine "
 				"GL_EXT_draw_range_elements GL_ARB_shader_objects GL_ARB_vertex_buffer_object "
-				"GL_EXT_bgra GL_ARB_texture_non_power_of_two";
+				"GL_EXT_bgra GL_ARB_texture_non_power_of_two GL_ARB_depth_clamp";
 		default:            return (const GLubyte *)"";
 	}
 }

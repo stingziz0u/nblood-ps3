@@ -102,6 +102,7 @@ ps3gl_states_reset(void)
 	ps3gl.rs.alpha_func = GL_ALWAYS;
 	ps3gl.rs.depth_mask = 1;
 	ps3gl.rs.depth_func = GL_LESS;
+	ps3gl.rs.depth_clamp = 0;
 	ps3gl.rs.cull_face = GL_BACK;
 	ps3gl.rs.front_face = GL_CCW;
 	ps3gl.rs.sc_w = ps3gl.rs.vp_w = ps3gl.screen_w;
@@ -145,6 +146,10 @@ EnableDisable(GLenum cap, int on)
 			break;
 		case GL_DEPTH_TEST:
 			ps3gl.rs.depth_test = on;
+			ps3gl.dirty |= PS3GL_DIRTY_DEPTH;
+			break;
+		case GL_DEPTH_CLAMP:
+			ps3gl.rs.depth_clamp = on;
 			ps3gl.dirty |= PS3GL_DIRTY_DEPTH;
 			break;
 		case GL_CULL_FACE:
@@ -474,6 +479,18 @@ ps3gl_apply_states(void)
 		rsxSetDepthTestEnable(ctx, ps3gl.rs.depth_test ? GCM_TRUE : GCM_FALSE);
 		rsxSetDepthFunc(ctx, CmpFunc(ps3gl.rs.depth_func));
 		rsxSetDepthWriteEnable(ctx, ps3gl.rs.depth_mask ? GCM_TRUE : GCM_FALSE);
+		/* GL_DEPTH_CLAMP: nothing is cut at the near and far planes, the
+		   depth is clamped instead. Polymost turns it on and puts the sky
+		   at a depth of 1e7/(1024*width): past its far plane (8) below a
+		   width of ~1221 (1280x720 was just inside), so without it the sky wasn't drawn at all. */
+		if (ps3gl.rs.depth_clamp)
+		{
+			rsxSetZMinMaxControl(ctx, GCM_FALSE, GCM_TRUE, GCM_FALSE);
+		}
+		else
+		{
+			rsxSetZMinMaxControl(ctx, GCM_TRUE, GCM_FALSE, GCM_FALSE);
+		}
 	}
 
 	if (d & PS3GL_DIRTY_CULL)

@@ -64,6 +64,10 @@
 
 #include "GL/gl.h"
 
+#ifndef GL_DEPTH_CLAMP
+#define GL_DEPTH_CLAMP 0x864F
+#endif
+
 /* Units 3 and 4 only exist for Polymost (detail and glow maps, which
    aren't drawn); the fixed function programs use 0-2. */
 #define PS3GL_MAX_TMUS          5
@@ -180,6 +184,7 @@ typedef struct {
 		GLenum   alpha_func;
 		float    alpha_ref;
 		int      depth_test, depth_mask;
+		int      depth_clamp;   /* GL_DEPTH_CLAMP (GL_ARB_depth_clamp) */
 		GLenum   depth_func;
 		int      cull;
 		GLenum   cull_face, front_face;

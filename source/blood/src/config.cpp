@@ -499,9 +499,19 @@ void CONFIG_SetDefaults(void)
 
     for (int i=0; i<MAXJOYAXES; i++)
     {
+#ifdef __PPU__
+        // PS3: the same for both sticks, each axis (the values of the Wii
+        // build). PC's strafe axis had half the scale of the move axis,
+        // half the stick dead (5000 of 10000) and a saturation past the
+        // stick's end (28500): strafing ran at a third of walking.
+        JoystickAnalogueScale[i] = PS3_JOYSTICKANALOGUESCALE;
+        JoystickAnalogueDead[i] = PS3_JOYSTICKANALOGUEDEAD;
+        JoystickAnalogueSaturate[i] = PS3_JOYSTICKANALOGUESATURATE;
+#else
         JoystickAnalogueScale[i] = joystickanalogscaledefaults[i];
         JoystickAnalogueDead[i] = joystickanalogdeaddefaults[i];
         JoystickAnalogueSaturate[i] = joystickanalogsaturatedefaults[i];
+#endif
         CONTROL_SetAnalogAxisScale(i, JoystickAnalogueScale[i], controldevice_joystick);
         JOYSTICK_SetDeadZone(i, JoystickAnalogueDead[i], JoystickAnalogueSaturate[i]);
 
@@ -623,6 +633,11 @@ void CONFIG_SetupJoystick(void)
 
     if (scripthandle < 0) return;
 
+#ifdef __PPU__
+    int32_t ps3sticks = 0;
+    SCRIPT_GetNumber(scripthandle, "Controls", "PS3Sticks", &ps3sticks);
+#endif
+
     for (i=0; i<MAXJOYBUTTONSANDHATS; i++)
     {
         Bsprintf(str,"JoystickButton%d",i);
@@ -657,6 +672,12 @@ void CONFIG_SetupJoystick(void)
             if (CONFIG_FunctionNameToNum(temp) != -1 || (!temp[0] && CONFIG_FunctionNameToNum(temp) != -1))
                 JoystickDigitalFunctions[i][1] = CONFIG_FunctionNameToNum(temp);
 
+#ifdef __PPU__
+        // a config of the builds before patch 11 has PC's stick values:
+        // those are left for the PS3's
+        if (ps3sticks >= 1)
+#endif
+        {
         Bsprintf(str,"JoystickAnalogScale%d",i);
         scale = JoystickAnalogueScale[i];
         SCRIPT_GetNumber(scripthandle, "Controls", str,&scale);
@@ -671,6 +692,7 @@ void CONFIG_SetupJoystick(void)
         scale = JoystickAnalogueSaturate[i];
         SCRIPT_GetNumber(scripthandle, "Controls", str,&scale);
         JoystickAnalogueSaturate[i] = scale;
+        }
 
         Bsprintf(str,"JoystickAnalogInvert%d",i);
         scale = JoystickAnalogueInvert[i];
@@ -999,6 +1021,9 @@ void CONFIG_WriteSetup(uint32_t flags)
             Bsprintf(buf, "JoystickAnalogInvert%d", dummy);
             SCRIPT_PutNumber(scripthandle, "Controls", buf, JoystickAnalogueInvert[dummy], FALSE, FALSE);
         }
+#ifdef __PPU__
+        SCRIPT_PutNumber(scripthandle, "Controls", "PS3Sticks", 1, FALSE, FALSE);
+#endif
     }
 
     SCRIPT_PutString(scripthandle, "Comm Setup","PlayerName",&szPlayerName[0]);
