@@ -600,7 +600,25 @@ PS3_rename(const char *from, const char *to)
 	char a[1024], b[1024];
 
 	CI_Forget();
-	return rename(FixPath(from, a, sizeof(a)), FixPath(to, b, sizeof(b)));
+	FixPath(from, a, sizeof(a));
+	FixPath(to, b, sizeof(b));
+
+	int r = rename(a, b);
+
+	/* lv2's rename doesn't replace a file that is there (C's does): Blood
+	 * writes a save over an old one as gameNNNN.sav_tmp and renames it,
+	 * so the old save stayed and the new one was left in the _tmp. The
+	 * old file goes first, then the rename again. */
+	if (r != 0)
+	{
+		struct stat st;
+
+		if (stat(b, &st) == 0 && !S_ISDIR(st.st_mode) && unlink(b) == 0)
+			r = rename(a, b);
+		if (r != 0)
+			PS3_Log("[file] rename %s -> %s: %s", a, b, strerror(errno));
+	}
+	return r;
 }
 
 /* There is no working directory on the PS3. The engine only changes to a
