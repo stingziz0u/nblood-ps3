@@ -485,15 +485,6 @@ void CDemo::LoadDemoInfo(void)
     Bsnprintf(zFN, BMAX_PATH, "%s*.dem", BloodIniPre);
     auto pList = klistpath("/", zFN, BUILDVFS_FIND_FILE);
     auto pIterator = pList;
-#ifdef __PPU__
-    // PS3, until the menu's demos play: what the search finds (patch 10)
-    {
-        int nListed = 0;
-        for (auto p = pList; p; p = p->next)
-            nListed++;
-        LOG_F(INFO, "[demo] \"%s\": %d file(s) in the search path", zFN, nListed);
-    }
-#endif
     while (pIterator != NULL)
     {
         int hFile = kopen4loadfrommod(pIterator->name, 0);
@@ -504,9 +495,6 @@ void CDemo::LoadDemoInfo(void)
 #if B_BIG_ENDIAN == 1
         atf.signature = B_LITTLE32(atf.signature);
         atf.nVersion = B_LITTLE16(atf.nVersion);
-#endif
-#ifdef __PPU__
-        LOG_F(INFO, "[demo] %s: signature %08x, version %x", pIterator->name, atf.signature, atf.nVersion);
 #endif
         if ((atf.signature == 0x1a4d4544 /* '\x1aMED' */&& atf.nVersion == BloodVersion)
             || (atf.signature == 0x1a4d4445 /* '\x1aMDE' */ && atf.nVersion == BYTEVERSION))

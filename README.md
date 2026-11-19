@@ -1,101 +1,216 @@
-# NBlood / Rednukem / PCExhumed
-Reverse-engineered ports of Build games using EDuke32 engine technology and development principles
+# NBlood-PS3
 
-## NBlood
-Blood port based on EDuke32.
+A native homebrew port of [NBlood](https://github.com/nukeykt/NBlood) for
+the PS3: Blood, with Cryptic Passage, in one package.
 
-<img width="320" height="240" alt="screenshot" src="https://github.com/user-attachments/assets/f517d412-ac7f-4002-ab47-35e41bab9f26" />
+## Lineage
 
-### Installing
-If you have a digital copy of Blood installed, such as from Steam or GOG, no installation is necessary! Otherwise:
+NBlood is the reverse-engineered source port of Monolith's Blood, built
+on EDuke32's engine technology and Ken Silverman's Build engine. This
+project adds a full PS3 platform layer underneath it (video on the RSX,
+audio, input, system integration), the same one as
+[EDuke32-PS3](https://github.com/stingziz0u/EDuke32-PS3). In short:
 
-1. Extract NBlood to a new directory
-2. Copy the following files from Blood 1.21 to NBlood folder:
-   * BLOOD.INI
-   * BLOOD.RFF
-   * BLOOD000.DEM, ..., BLOOD003.DEM (optional)
-   * CP01.MAP, ..., CP09.MAP (optional, Cryptic Passage)
-   * CPART07.AR_ (optional, Cryptic Passage)
-   * CPART15.AR_ (optional, Cryptic Passage)
-   * CPBB01.MAP, ..., CPBB04.MAP (optional, Cryptic Passage)
-   * CPSL.MAP (optional, Cryptic Passage)
-   * CRYPTIC.INI (optional, Cryptic Passage)
-   * CRYPTIC.SMK (optional, Cryptic Passage)
-   * CRYPTIC.WAV (optional, Cryptic Passage)
-   * GUI.RFF
-   * SOUNDS.RFF
-   * SURFACE.DAT
-   * TILES000.ART, ..., TILES017.ART
-   * VOXEL.DAT
+```
+Blood (Monolith, 1997) -> NBlood -> NBlood-PS3 (this project)
+```
 
-3. Optionally, if you want to use CD audio tracks instead of MIDI, provide FLAC/OGG recordings in following format: bloodXX.flac/ogg, where XX is track number. Make sure to enable Redbook audio option in sound menu.
-4. Optionally, if you want cutscenes and you have the original CD, copy the `movie` folder into NBlood's folder (the folder itself too).
-If you have the GOG version of the game, do the following:
-   * make a copy of `game.ins` (or `game.inst`) named `game.cue`
-   * mount the `.cue` as a virtual CD (for example with `WinCDEmu`)
-   * copy the `movie` folder from the mounted CD into NBlood's folder
-5. Launch NBlood (on Linux, to play Cryptic Passage, launch with the `-ini CRYPTIC.INI` parameter)
+The upstream README, for NBlood itself, is in
+[`README.NBlood.md`](README.NBlood.md).
 
-### Notes
-NBlood now uses nblood_cvars.cfg instead of settings.cfg. Please rename your settings.cfg if you need to retain settings from a previous version.
+## Tested games
 
-## PCExhumed
-A port of the PC version of Exhumed based on EDuke32.
+**Blood: One Unit Whole Blood** (version 1.21) and **Cryptic Passage**
+have been tested on real hardware: whole episodes, their cutscenes and
+endings, saving and loading, the demos.
 
-<img width="320" height="240" alt="screenshot" src="https://github.com/user-attachments/assets/43ec8959-a6e6-4d8c-a4a9-3d3f9f08d65a" />
+User maps and mods should work the same way, but haven't been tested.
 
-### Installing
-If you have a digital copy of PowerSlave (DOS Classic Edition) installed, such as from Steam or GOG, no installation is necessary! Otherwise:
+## Features
 
-1. Extract PCExhumed to a new directory.
-2. Copy the following files from the PC retail version of Exhumed or Powerslave (Exhumed preferred), or the Powerslave demo available at http://www.jonof.id.au/build.games/ps. Beta, pre-release or other demo versions not supported.
+- **One package, one launcher**: Blood and Cryptic Passage in a single
+  install. At start a menu lists what is installed (skipped when there is
+  only one thing to play); Quit from the game's menu comes back to it, and
+  so does an error, shown under the list.
+- **Separate saves per game**: Blood and Cryptic Passage keep their own
+  saves in `USRDIR/saves/`. Each save has its picture in the Load/Save
+  menus, drawn by the software renderer at 320x200 (the GPU's frame can't
+  be read back). Saving over a slot replaces it.
+- **On-screen keyboard** for the save names and the player name.
+- **Load on death**: when you die, the screen offers both: Open restarts
+  the level, Fire opens the Load Game menu.
+- **Video**: Polymost drawn by the RSX, at a stable 60 fps. The internal
+  resolution (up to 1280x720) is scaled by the RSX to 720p output.
+  Options -> Display Setup -> Video Mode has the frame rate limit (60 or
+  30 fps), an FPS display, widescreen, the **Texture Filter** (from sharp
+  to trilinear) and a **TV screen fit** (70-100 %) that shrinks the
+  picture for TVs that cut its edges (overscan).
+- **Audio**: 48000 Hz on the PS3's audio port. The music through the OPL3
+  emulation or a **SoundFont** (`.sf2`), synthesized on an SPU so it costs
+  the game nothing. Volume sliders in steps of 5.
+- **Input**: DualShock 3 for movement, look and every action, all
+  rebindable from the in-game menus, plus an optional **lock-on** (unbound
+  by default) and vibration. The PC-only settings (keyboard, mouse,
+  display mode) are gone, and the on-screen texts and the Help page name
+  the DS3's buttons. Only pad number 1 plays: if it powers off, it takes
+  over again when it comes back.
+- **File names in any case**: `BLOOD.RFF`, `blood.rff` and `Blood.rff` are
+  all found, even though the PS3's file system tells them apart.
+- Clean exit to the XMB from the game's Quit option or the PS button.
 
-   * STUFF.DAT
-   * DEMO.VCR
-   * BOOK.MOV
+## Requirements
 
-3. Recommended (but optional) - Add the games CD audio tracks as OGG files in the format exhumedXX.ogg or trackXX.ogg (where XX is the track number) to the same folder as
-   pcexhumed.exe. The game includes tracks 02 to 19.
-   These will provide the game with its music soundtrack and add storyline narration by the King Ramses NPC.
+- A PS3 capable of running homebrew (HEN or CFW).
+- Your own legally-owned copy of Blood. **No game data is included in this
+  repository or in any release build** -- see
+  [Installation](#installation).
+- To build from source: the [ps3dev / PSL1GHT](https://github.com/ps3dev)
+  toolchain (`ppu-gcc`, `spu-gcc`, PSL1GHT SDK, `make_self_npdrm`,
+  `pkg.py`).
 
-4. Launch PCExhumed.
+## Installation
 
-### Notes
-Demo playback is not yet working.
+Install `nblood-ps3-1.0.pkg` from the XMB (shows up as "NBlood"). This
+creates `/dev_hdd0/game/NBLOODPS3/USRDIR/` with an empty `addons/` folder
+and NBlood's own `nblood.pk3`. By FTP, place the files of your Blood 1.21
+there:
 
-### Adjusting settings
-We are currently working on fancy new menus for the game. In the meantime, you can edit the settings.cfg file in the game directory that's created on first run.
+```
+NBLOODPS3/USRDIR/BLOOD.INI            <- required
+NBLOODPS3/USRDIR/BLOOD.RFF            <- required
+NBLOODPS3/USRDIR/GUI.RFF              <- required
+NBLOODPS3/USRDIR/SOUNDS.RFF           <- required
+NBLOODPS3/USRDIR/SURFACE.DAT          <- required
+NBLOODPS3/USRDIR/VOXEL.DAT            <- required
+NBLOODPS3/USRDIR/TILES000.ART         <- required, TILES000 .. TILES017
+...
+NBLOODPS3/USRDIR/BLOOD000.DEM         <- optional, the demos (BLOOD000 .. 003)
+NBLOODPS3/USRDIR/*.SMK                <- optional, the cutscenes
+NBLOODPS3/USRDIR/CRYPTIC.INI          <- optional, Cryptic Passage, with its
+NBLOODPS3/USRDIR/CP*.MAP                 maps, CPART07.AR_ and CPART15.AR_
+NBLOODPS3/USRDIR/CPART07.AR_
+NBLOODPS3/USRDIR/GeneralUser-GS.sf2   <- optional, any SoundFont for the music
+```
 
-To invert the mouse, add the line 'in_mouseflip 0' to settings.cfg.
-To change the FOV, add a new line to settings.cfg, e.g. 'fov "120"' where 120 is the desired FOV value between 60 and 140.
+The GOG and Steam releases (Blood: One Unit Whole Blood) have all of
+these. The demos have to be the ones of version 1.21: older ones are
+skipped.
 
-## Rednukem
-A port of several BUILD Engine games derived from the Duke Nukem 3D codebase, based on EDuke32.
-
-<img width="320" height="240" alt="screenshot" src="https://github.com/user-attachments/assets/e7650c88-3907-47c3-81eb-2fb012435ca2" />
-
-### Supported games
-
-* Duke Nukem 3D: Atomic Edition
-* Redneck Rampage
-* Redneck Rampage: Rides Again
-* Duke Nukem 64
-* NAM/NAPALM
-* World War II GI
-
-### Installing
-1. Extract Rednukem to a new directory.
-2. Copy game data files:
-    * Duke Nukem 3D: DUKE3D.GRP, DUKE.RTS
-    * Redneck Rampage: REDNECK.GRP, REDNECK.RTS, optionally CD audio tracks as OGG file in the format trackXX.ogg (where XX is the track number)
-    * Duke Nukem 64: Duke 64 cartridge ROM dump, optionally MIDI tracks extracted from DUKE3D.GRP
-    * NAM: NAM.GRP, NAM.RTS, CON files
-    * World War II GI: WW2GI.GRP, WW2GI.RTS, CON files
-3. Launch Rednukem
+For the music, the first `.sf2` in `USRDIR` is used, and Options -> Sound
+Setup -> SF2 Bank picks another one. A SoundFont stays in memory while the
+game runs (GeneralUser-GS takes 33 MB); one that would leave the game too
+little memory isn't loaded, and the music goes to the OPL3 emulation.
+SoundFonts of 5-30 MB are the comfortable range.
 
 ## Building from source
-See: https://wiki.eduke32.com/wiki/Main_Page
 
-## Acknowledgments
-  See AUTHORS.md
+1. Install the [ps3dev toolchain](https://github.com/ps3dev/ps3toolchain)
+   (third-party, not part of this project -- these are its own official
+   instructions):
 
+   ```bash
+   git clone https://github.com/ps3dev/ps3toolchain.git
+   cd ps3toolchain
+   export PS3DEV=/usr/local/ps3dev
+   export PSL1GHT=$PS3DEV
+   export PATH="$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin"
+   ./toolchain.sh
+   ```
+
+2. Clone this repository and build:
+
+   ```bash
+   git clone https://github.com/stingziz0u/NBlood-PS3.git
+   cd NBlood-PS3
+   make -C ps3 -j$(nproc)            # -> ps3/nblood-ps3-1.0.pkg
+   ```
+
+The SoundFont synthesizer's SPU program needs `spu-gcc`; without it, or
+with `SPU=0`, the SoundFont is synthesized on the PPU instead.
+
+The `ps3/` directory holds everything specific to this port:
+
+- **`Makefile`** -- builds the engine, the game, the PS3 layer and the SPU
+  program, and packages them.
+- **`source/`** -- the PS3 layer: `ps3layer.cpp` (the engine's platform
+  layer: video modes, the DualShock 3, events, the XMB), `ps3_video.c` (the
+  RSX), `gl/` (ps3gl, the OpenGL subset Polymost draws with, on the RSX),
+  `driver_ps3.cpp` (the audio port), `ps3_sf2spu.c` (the SoundFont on an
+  SPU), `ps3_launcher.c`, `ps3_stdio.c` (files), the log.
+- **`spu/`** -- the SoundFont synthesizer's SPU program.
+- **`ICON0.PNG`** -- the XMB icon.
+
+What is PS3-specific in the game itself is under `#ifdef __PPU__` in
+`source/blood/src` (`ps3_blood.cpp` holds the new pieces: the Help page,
+the save pictures, the on-screen keyboard's hooks, the death prompt).
+
+### Logs
+
+The release build writes nothing to the HDD but your saves and settings.
+For troubleshooting, put a file named `logs.txt` (any content, even empty)
+in `USRDIR`: the next start writes `nblood-ps3.log` (the PS3 layer, with
+fps and memory figures every 10 seconds, the previous run kept as
+`nblood-ps3.old.log`) and the engine's own `nblood.log` next to it.
+Delete `logs.txt` to turn them off again.
+
+## Controls
+
+| Action | Button |
+|---|---|
+| Move / Strafe | Left stick |
+| Turn / Look | Right stick |
+| Fire | R2 |
+| Alternate fire | L2 |
+| Jump | Cross |
+| Crouch (toggle) | Circle |
+| Open / Use | Square |
+| Last weapon | Triangle, D-pad up |
+| Prev / Next weapon | L1 / R1 |
+| Use item | D-pad down |
+| Prev / Next item | D-pad left / right |
+| Turn around | R3 |
+| Map | Select |
+| Lock on | *(unbound)* |
+| Menu / pause | Start |
+
+In the menus: Cross confirms, Circle goes back, Start closes them; holding
+a direction repeats it. Everything except Start is rebindable from
+Options -> Control Setup -> Joystick Buttons Setup, and the sticks (scale,
+dead zone, saturation, inversion) from Joystick Axes Setup. **Lock on**,
+while held, turns the view to the nearest enemy in front of you that can
+be seen and follows it; moving and strafing stay free.
+
+## Known limitations
+
+- No multiplayer.
+- DualShock 3 only: no USB keyboard or mouse.
+- No in-game console (it needs a keyboard).
+
+## Credits
+
+- [NBlood](https://github.com/nukeykt/NBlood) by Nuke.YKT, sirlemonhead,
+  NoOne and contributors -- the game this project is built on.
+- [EDuke32](https://www.eduke32.com/) by Richard "TerminX" Gobeille, Evan
+  "Hendricks266" Ramos and contributors, for the engine technology NBlood
+  uses.
+- Ken Silverman, for the Build engine.
+- Monolith Productions, for Blood.
+- Bernhard Schelling's TinySoundFont, the SoundFont synthesizer NBlood
+  uses (and this port runs on an SPU).
+
+## License
+
+GPLv2, inherited from NBlood and EDuke32 (see
+[`package/common/gpl-2.0.txt`](package/common/gpl-2.0.txt)); the Build
+engine under its own license (see
+[`package/common/buildlic.txt`](package/common/buildlic.txt)).
+
+No game data files (`.RFF`, `.ART`, maps, music, or otherwise) are
+included in this repository. You need your own legally-owned copy of the
+game.
+
+## AI disclosure
+
+This project's code was written collaboratively with Claude (Anthropic),
+working through this port with me in real time over many sessions.
+Every bit of testing and debugging were made by me on real hardware.

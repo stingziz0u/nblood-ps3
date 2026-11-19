@@ -250,7 +250,12 @@ CGameMenuItemChain7F2F0 itemEpisodes[kMaxEpisodes-1];
 CGameMenu menuUserMap;
 CGameMenuItemChain itemUserMap("USER MAP", 1, 0, 60, 320, 1, &menuUserMap, 0, NULL, 0);
 CGameMenuItemTitle itemUserMapTitle("USER MAP", 1, 160, 20, 2038);
+#ifdef __PPU__
+// PS3: the maps of USRDIR (the search path's root, as the SF2 banks')
+CGameMenuFileSelect itemUserMapList("", 3, 0, 0, 0, "/", "*.map", gGameOptions.szUserMap, ShowDifficulties, 0);
+#else
 CGameMenuFileSelect itemUserMapList("", 3, 0, 0, 0, "./", "*.map", gGameOptions.szUserMap, ShowDifficulties, 0);
+#endif
 
 CGameMenuItemTitle itemDifficultyTitle("DIFFICULTY", 1, 160, 20, 2038);
 CGameMenuItemChain itemDifficulty1("STILL KICKING", 1, 0, 50, 320, 1, NULL, -1, SetDifficultyAndStart, 0);
