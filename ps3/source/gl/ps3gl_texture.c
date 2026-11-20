@@ -8,7 +8,12 @@
  *
  * =======================================================================
  *
- * ps3gl: textures. Everything is stored as A8R8G8B8 in RSX memory.
+ * ps3gl: textures. Stored as A8R8G8B8 in RSX memory, but for the one
+ * channel ones (GL_RED / GL_LUMINANCE: Polymost's tilesheets of palette
+ * indices and its shade table), which are B8, a byte a texel, the RSX
+ * putting it in R, G and B (alpha 1), as A8R8G8B8 had it. Each of
+ * Polymost's 2048x2048 tilesheets took 16 MB as 32 bits: Redneck
+ * Rampage needs 13 of them, and the RSX ran out (NBlood-PS3 patch 22).
  *
  *  - Power of two sizes (all of TyrQuake's: ps3gl doesn't offer NPOT
  *    textures, so TyrQuake pads or stretches them): SWIZZLED (Morton
@@ -44,6 +49,27 @@
 
 /* identity remap (IoQuake3-PS3 / Doom64-PS3) */
 #define TEX_REMAP_IDENTITY 0x00AAE4
+
+/* B8: R, G and B from the texel's one channel (B), alpha one */
+#define TEX_REMAP_B8 \
+	((GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) | \
+	 (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) | \
+	 (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) | \
+	 (GCM_TEXTURE_REMAP_TYPE_ONE << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) | \
+	 (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_B_SHIFT) | \
+	 (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) | \
+	 (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) | \
+	 (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT))
+
+/* (GL_R8 and GL_LUMINANCE8, as internal formats: glad's values) */
+#define PS3GL_R8          0x8229
+#define PS3GL_LUMINANCE8  0x8040
+
+static int
+TexelBytes(const ps3gl_texture_t *t)
+{
+	return t->bpp ? t->bpp : 4;
+}
 
 /* conversion buffer, grown on demand */
 static uint32_t *scratch;
@@ -121,16 +147,16 @@ LevelDim(int base, int level)
 	return d ? d : 1;
 }
 
-/* Byte offset of 'level' in a swizzled chain */
+/* Byte offset of 'level' in a swizzled chain of 'bpp' byte texels */
 static uint32_t
-LevelOffset(int w, int h, int level)
+LevelOffset(int w, int h, int level, int bpp)
 {
 	uint32_t off = 0;
 	int i;
 
 	for (i = 0; i < level; i++)
 	{
-		off += (uint32_t)LevelDim(w, i) * LevelDim(h, i) * 4;
+		off += (uint32_t)LevelDim(w, i) * LevelDim(h, i) * bpp;
 	}
 
 	return off;
@@ -262,12 +288,12 @@ static void
 BuildDescriptor(ps3gl_texture_t *t)
 {
 	memset(&t->gt, 0, sizeof(t->gt));
-	t->gt.format = GCM_TEXTURE_FORMAT_A8R8G8B8 |
+	t->gt.format = (TexelBytes(t) == 1 ? GCM_TEXTURE_FORMAT_B8 : GCM_TEXTURE_FORMAT_A8R8G8B8) |
 		(t->swizzled ? GCM_TEXTURE_FORMAT_SWZ : GCM_TEXTURE_FORMAT_LIN);
 	t->gt.mipmap = t->num_levels ? t->num_levels : 1;
 	t->gt.dimension = GCM_TEXTURE_DIMS_2D;
 	t->gt.cubemap = GCM_FALSE;
-	t->gt.remap = TEX_REMAP_IDENTITY;
+	t->gt.remap = TexelBytes(t) == 1 ? TEX_REMAP_B8 : TEX_REMAP_IDENTITY;
 	t->gt.width = t->width;
 	t->gt.height = t->height;
 	t->gt.depth = 1;
@@ -392,7 +418,8 @@ ps3gl_texel(const ps3gl_texture_t *t, int x, int y)
 
 	if (!t->swizzled)
 	{
-		return t->data[(size_t)y * t->pitch + (size_t)x * 4 + 1];
+		return TexelBytes(t) == 1 ? t->data[(size_t)y * t->pitch + x] :
+			t->data[(size_t)y * t->pitch + (size_t)x * 4 + 1];
 	}
 
 	lw = Log2(t->width);
@@ -404,7 +431,7 @@ ps3gl_texel(const ps3gl_texture_t *t, int x, int y)
 		if (lh) { off |= (uint32_t)(y & 1) << bit; y >>= 1; bit++; lh--; }
 	}
 
-	return t->data[(size_t)off * 4 + 1];
+	return TexelBytes(t) == 1 ? t->data[off] : t->data[(size_t)off * 4 + 1];
 }
 
 GLboolean APIENTRY
@@ -447,6 +474,118 @@ glPixelStorei(GLenum pname, GLint param)
 
 /* Writes a w x h block of source pixels at (x, y) of 'level', converted,
    into RSX memory. The block is the whole level for glTexImage2D. */
+/* The swizzle tables for a level of lw x lh (kept for the next one) */
+static int
+SwizzleFor(int lw, int lh)
+{
+	if (lw != swz_w || lh != swz_h)
+	{
+		free(swz_tx);
+		swz_tx = (uint32_t *)malloc((size_t)(lw + lh) * sizeof(uint32_t));
+		swz_w = swz_h = 0;
+
+		if (!swz_tx)
+		{
+			return 0;
+		}
+
+		swz_ty = swz_tx + lw;
+		SwizzleTables(swz_tx, swz_ty, lw, lh);
+		swz_w = lw;
+		swz_h = lh;
+	}
+
+	return 1;
+}
+
+/* One source pixel -> the one channel of a B8 texture: the byte itself,
+   or the red of anything wider (a texture given another format later) */
+static inline uint8_t
+ToB8(const uint8_t *p, int bytes, GLenum format)
+{
+	return bytes == 1 ? p[0] : (uint8_t)(ToARGB(p, bytes, format) >> 16);
+}
+
+/* Upload for B8 textures (a byte a texel), as Upload below */
+static void
+Upload8(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
+		GLenum format, const uint8_t *src, int row_pixels, int lw, int lh)
+{
+	int bytes = FormatBytes(format);
+	int i, j;
+
+	if (t->swizzled)
+	{
+		uint8_t *dst = t->data + LevelOffset(t->width, t->height, level, 1);
+
+		if (!SwizzleFor(lw, lh))
+		{
+			return;
+		}
+
+		if (x == 0 && y == 0 && w == lw && h == lh)
+		{
+			/* whole level: swizzle into memory, one copy */
+			uint8_t *pix = (uint8_t *)Scratch((size_t)w * h);
+
+			if (!pix)
+			{
+				return;
+			}
+
+			for (j = 0; j < h; j++)
+			{
+				const uint8_t *s = src + (size_t)j * row_pixels * bytes;
+
+				for (i = 0; i < w; i++, s += bytes)
+				{
+					pix[swz_tx[i] | swz_ty[j]] = ToB8(s, bytes, format);
+				}
+			}
+
+			memcpy(dst, pix, (size_t)w * h);
+		}
+		else
+		{
+			/* part of it (a tile into its tilesheet): straight to its places */
+			for (j = 0; j < h; j++)
+			{
+				const uint8_t *s = src + (size_t)j * row_pixels * bytes;
+				uint32_t oy = swz_ty[y + j];
+
+				for (i = 0; i < w; i++, s += bytes)
+				{
+					dst[swz_tx[x + i] | oy] = ToB8(s, bytes, format);
+				}
+			}
+		}
+	}
+	else
+	{
+		uint8_t *row = (uint8_t *)Scratch((size_t)w);
+
+		if (!row)
+		{
+			return;
+		}
+
+		for (j = 0; j < h; j++)
+		{
+			const uint8_t *s = src + (size_t)j * row_pixels * bytes;
+
+			for (i = 0; i < w; i++, s += bytes)
+			{
+				row[i] = ToB8(s, bytes, format);
+			}
+
+			memcpy(t->data + (size_t)(y + j) * t->pitch + x, row, (size_t)w);
+		}
+	}
+
+	ps3gl.st_upload += (uint32_t)w * h;
+	ps3gl.tex_written = 1;
+}
+
 static void
 Upload(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
 		GLenum format, const uint8_t *src)
@@ -461,26 +600,20 @@ Upload(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
 		return;
 	}
 
+	if (TexelBytes(t) == 1)
+	{
+		Upload8(t, level, x, y, w, h, format, src, row_pixels, lw, lh);
+		return;
+	}
+
 	if (t->swizzled)
 	{
-		uint32_t *dst = (uint32_t *)(t->data + LevelOffset(t->width, t->height, level));
+		uint32_t *dst = (uint32_t *)(t->data + LevelOffset(t->width, t->height, level, 4));
 		uint32_t *tx, *ty, *pix;
 
-		if (lw != swz_w || lh != swz_h)
+		if (!SwizzleFor(lw, lh))
 		{
-			free(swz_tx);
-			swz_tx = (uint32_t *)malloc((size_t)(lw + lh) * sizeof(uint32_t));
-			swz_w = swz_h = 0;
-
-			if (!swz_tx)
-			{
-				return;
-			}
-
-			swz_ty = swz_tx + lw;
-			SwizzleTables(swz_tx, swz_ty, lw, lh);
-			swz_w = lw;
-			swz_h = lh;
+			return;
 		}
 
 		tx = swz_tx;
@@ -588,6 +721,11 @@ glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 	{
 		int swz = IsPow2(width) && IsPow2(height);
 		int levels = swz ? Log2(width > height ? width : height) + 1 : 1;
+		/* one channel in, one channel kept: a byte a texel (B8) */
+		int bpp = ((format == GL_RED || format == GL_LUMINANCE) &&
+				   (internalFormat == GL_RED || internalFormat == GL_LUMINANCE ||
+					internalFormat == PS3GL_R8 || internalFormat == PS3GL_LUMINANCE8 ||
+					internalFormat == 1)) ? 1 : 4;
 		uint32_t pitch;
 		uint32_t size;
 
@@ -598,13 +736,13 @@ glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 			levels = t->max_level;
 		}
 
-		pitch = swz ? 0 : (((uint32_t)width * 4 + 63) & ~63u);
-		size = swz ? LevelOffset(width, height, levels) : pitch * height;
+		pitch = swz ? 0 : (((uint32_t)width * bpp + 63) & ~63u);
+		size = swz ? LevelOffset(width, height, levels, bpp) : pitch * height;
 
 		/* Same shape and the RSX is done with it: reuse. Otherwise new
 		   storage; the old one is freed when the RSX is done. */
 		if (!t->data || t->width != width || t->height != height ||
-			t->swizzled != swz || t->max_levels != levels || Busy(t))
+			t->swizzled != swz || t->max_levels != levels || TexelBytes(t) != bpp || Busy(t))
 		{
 			ReleaseStorage(t);
 
@@ -641,6 +779,7 @@ glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 		t->width = (uint16_t)width;
 		t->height = (uint16_t)height;
 		t->swizzled = (uint8_t)swz;
+		t->bpp = (uint8_t)bpp;
 		t->pitch = pitch;
 		t->max_levels = (uint8_t)levels;
 		t->num_levels = 0;
@@ -751,6 +890,12 @@ glCopyTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
 	(void)target;
 
 	if (!ctx || !t || !t->data || level != 0 || width <= 0 || height <= 0)
+	{
+		return;
+	}
+
+	/* the render target is 32 bits: not into a B8 texture (nothing does) */
+	if (TexelBytes(t) != 4)
 	{
 		return;
 	}
