@@ -692,7 +692,12 @@ static int32_t MEOSV_VIDEOSETUP_FRAMELIMIT [] = { -1, 0, 30, 60, 75, 100, 120, 1
 #endif
 static MenuOptionSet_t MEOS_VIDEOSETUP_FRAMELIMIT = MAKE_MENUOPTIONSET(MEOSN_VIDEOSETUP_FRAMELIMIT, MEOSV_VIDEOSETUP_FRAMELIMIT, 0x0);
 static MenuOption_t MEO_VIDEOSETUP_FRAMELIMIT= MAKE_MENUOPTION(&MF_Redfont, &MEOS_VIDEOSETUP_FRAMELIMIT, &r_maxfps);
+#ifdef __PPU__
+// (PS3: the labels short, RR's big font ran them into their values)
+static MenuEntry_t ME_VIDEOSETUP_FRAMELIMIT = MAKE_MENUENTRY("FPS limit:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_FRAMELIMIT, Option);
+#else
 static MenuEntry_t ME_VIDEOSETUP_FRAMELIMIT = MAKE_MENUENTRY("Framerate limit:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_FRAMELIMIT, Option);
+#endif
 
 // static MenuRangeInt32_t MEO_VIDEOSETUP_FRAMELIMITOFFSET = MAKE_MENURANGE( &r_maxfpsoffset, &MF_Redfont, -10, 10, 0, 21, 1 );
 // static MenuEntry_t ME_VIDEOSETUP_FRAMELIMITOFFSET = MAKE_MENUENTRY( "FPS offset:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_FRAMELIMITOFFSET, RangeInt32 );
@@ -710,14 +715,14 @@ static MenuEntry_t ME_VIDEOSETUP_SHOWFPS = MAKE_MENUENTRY( "Show FPS:", &MF_Redf
 // how much of the TV the picture uses (overscan), vid_ps3_screenfit,
 // 70..100 % in steps of 2; the layer applies it on the next frame
 static MenuRangeInt32_t MEO_VIDEOSETUP_SCREENFIT = MAKE_MENURANGE( &vid_ps3_screenfit, &MF_Redfont, 70, 100, 0, 16, DisplayTypeInteger );
-static MenuEntry_t ME_VIDEOSETUP_SCREENFIT = MAKE_MENUENTRY( "TV screen fit:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_SCREENFIT, RangeInt32 );
+static MenuEntry_t ME_VIDEOSETUP_SCREENFIT = MAKE_MENUENTRY( "Overscan:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_SCREENFIT, RangeInt32 );
 
 // Polymost's six filters (gltexfiltermode: GL_NEAREST ... GL_LINEAR_MIPMAP_LINEAR)
-static char const *MEOSN_VIDEOSETUP_PS3TEXFILTER[] = { "None", "Bilinear", "None, mips", "Bilin., mips", "None, smooth", "Trilinear" };
+static char const *MEOSN_VIDEOSETUP_PS3TEXFILTER[] = { "None", "Bilinear", "Mipmaps", "Bilin+mip", "Smooth", "Trilinear" };
 static int32_t MEOSV_VIDEOSETUP_PS3TEXFILTER[] = { 0, 1, 2, 3, 4, 5 };
 static MenuOptionSet_t MEOS_VIDEOSETUP_PS3TEXFILTER = MAKE_MENUOPTIONSET( MEOSN_VIDEOSETUP_PS3TEXFILTER, MEOSV_VIDEOSETUP_PS3TEXFILTER, 0x0 );
 static MenuOption_t MEO_VIDEOSETUP_PS3TEXFILTER = MAKE_MENUOPTION( &MF_Redfont, &MEOS_VIDEOSETUP_PS3TEXFILTER, &gltexfiltermode );
-static MenuEntry_t ME_VIDEOSETUP_PS3TEXFILTER = MAKE_MENUENTRY( "Texture filter:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_PS3TEXFILTER, Option );
+static MenuEntry_t ME_VIDEOSETUP_PS3TEXFILTER = MAKE_MENUENTRY( "Filter:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_PS3TEXFILTER, Option );
 #endif
 
 
@@ -1160,10 +1165,18 @@ static MenuEntry_t *MEL_JOYSTICKSETUP[] = {
 MAKE_MENU_TOP_ENTRYLINK( "Edit Axes and Triggers", MEF_BigOptionsRtSections, JOYSTICK_EDITAXES, MENU_JOYSTICKAXES );
 
 static MenuRangeInt32_t MEO_JOYSTICK_WEIGHTED_AIMING = MAKE_MENURANGE(&ud.config.JoystickAimWeight , &MF_Bluefont, 0, 8, 0, 9, 0 );
+#ifdef __PPU__
+static MenuEntry_t ME_JOYSTICK_WEIGHTED_AIMING = MAKE_MENUENTRY( "Aim weight:", &MF_Redfont, &MEF_BigSliders, &MEO_JOYSTICK_WEIGHTED_AIMING, RangeInt32 );
+#else
 static MenuEntry_t ME_JOYSTICK_WEIGHTED_AIMING = MAKE_MENUENTRY( "Weighted aiming:", &MF_Redfont, &MEF_BigSliders, &MEO_JOYSTICK_WEIGHTED_AIMING, RangeInt32 );
+#endif
 
 static MenuRangeInt32_t MEO_JOYSTICK_VIEW_CENTERING = MAKE_MENURANGE(&ud.config.JoystickViewCentering , &MF_Bluefont, 0, 8, 0, 5, 0 );
+#ifdef __PPU__
+static MenuEntry_t ME_JOYSTICK_VIEW_CENTERING = MAKE_MENUENTRY( "Centering:", &MF_Redfont, &MEF_BigSliders, &MEO_JOYSTICK_VIEW_CENTERING, RangeInt32 );
+#else
 static MenuEntry_t ME_JOYSTICK_VIEW_CENTERING = MAKE_MENUENTRY( "View centering:", &MF_Redfont, &MEF_BigSliders, &MEO_JOYSTICK_VIEW_CENTERING, RangeInt32 );
+#endif
 
 static MenuOption_t MEO_JOYSTICK_AIM_ASSIST = MAKE_MENUOPTION( &MF_Redfont, &MEOS_OffOn, &ud.config.JoystickAimAssist );
 static MenuEntry_t ME_JOYSTICK_AIM_ASSIST = MAKE_MENUENTRY( "Aim assist:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_JOYSTICK_AIM_ASSIST, Option );

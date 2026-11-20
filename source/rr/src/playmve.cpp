@@ -539,7 +539,10 @@ bool InterplayDecoder::Run()
                         predictor[ch] |= 0xFFFF0000; // sign extend
                     }
 
-                    *pBuf++ = predictor[ch];
+                    // the mixer reads 16 bit samples as little endian
+                    // (WAV's order, audiolib's mix.cpp): on a big endian
+                    // CPU they go in swapped, or it plays noise (the PS3)
+                    *pBuf++ = (int16_t)B_LITTLE16((uint16_t)predictor[ch]);
                 }
 
                 int ch = 0;
@@ -548,7 +551,7 @@ bool InterplayDecoder::Run()
                     predictor[ch] += delta_table[file.ReadByte()];
                     predictor[ch] = ClipRange(predictor[ch], -32768, 32768);
 
-                    *pBuf++ = predictor[ch];
+                    *pBuf++ = (int16_t)B_LITTLE16((uint16_t)predictor[ch]);
 
                     // toggle channel
                     ch ^= audio.nChannels - 1;
