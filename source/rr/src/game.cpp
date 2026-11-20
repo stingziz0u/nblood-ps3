@@ -6431,6 +6431,75 @@ static void G_PS3_Rumble(void)
 }
 #endif
 
+#ifdef PS3_DEBUG_CHEATS
+// PS3 debug build (make -C ps3 GAME=rr DEBUG=1), for testing: always god
+// mode; every weapon (RDALL's) when the player starts, ammo kept full; all
+// the keys; L3 + R3 together ends the level (as its exit would).
+extern "C" int32_t PS3_PadHeldBits(void);   // ps3layer.cpp
+
+static void G_PS3_DebugCheats(void)
+{
+    static int  givenTo = -1;
+    static bool skipHeld;
+
+    auto const pPlayer = g_player[myconnectindex].ps;
+
+    if (!(pPlayer->gm & MODE_GAME) || (pPlayer->gm & (MODE_MENU|MODE_EOL)) || pPlayer->i < 0
+        || g_netServer || ud.multimode > 1 || ud.recstat == 2)
+        return;
+
+    if (sprite[pPlayer->i].extra <= 0)
+    {
+        givenTo = -1;
+        return;
+    }
+
+    ud.god = 1;
+
+    // the player's sprite changes with each level (and life): the
+    // weapons again then
+    if (givenTo != pPlayer->i)
+    {
+        givenTo = pPlayer->i;
+
+        for (int weaponNum = PISTOL_WEAPON; weaponNum < MAX_WEAPONS; weaponNum++)
+        {
+            if (RRRA && (weaponNum == MOTORCYCLE_WEAPON || weaponNum == BOAT_WEAPON))
+                continue;
+            pPlayer->gotweapon |= (1 << weaponNum);
+        }
+    }
+
+    for (int weaponNum = PISTOL_WEAPON; weaponNum < MAX_WEAPONS; weaponNum++)
+    {
+        if (!(pPlayer->gotweapon & (1 << weaponNum)) || (RRRA && (weaponNum == MOTORCYCLE_WEAPON || weaponNum == BOAT_WEAPON)))
+            continue;
+
+        if (RRRA && weaponNum == SLINGBLADE_WEAPON)
+            pPlayer->ammo_amount[weaponNum] = 1;
+        else if (pPlayer->ammo_amount[weaponNum] < pPlayer->max_ammo_amount[weaponNum])
+            pPlayer->ammo_amount[weaponNum] = pPlayer->max_ammo_amount[weaponNum];
+    }
+
+    pPlayer->got_access = 7;
+    if (RR)
+        for (int key = 0; key < 5; key++)
+            pPlayer->keys[key] = 1;
+
+    // L3 + R3: the level done (next one), as its exit switch does
+    int32_t const held = PS3_PadHeldBits();
+    bool const skip = (held & (1 << CONTROLLER_BUTTON_LEFTSTICK)) && (held & (1 << CONTROLLER_BUTTON_RIGHTSTICK));
+
+    if (skip && !skipHeld)
+    {
+        pPlayer->player_par = 0;
+        pPlayer->gm = MODE_EOL;
+    }
+
+    skipHeld = skip;
+}
+#endif
+
 void G_HandleLocalKeys(void)
 {
 //    CONTROL_ProcessBinds();
@@ -6443,6 +6512,9 @@ void G_HandleLocalKeys(void)
 
 #ifdef __PPU__
     G_PS3_Rumble();
+#ifdef PS3_DEBUG_CHEATS
+    G_PS3_DebugCheats();
+#endif
 
     // PS3: dead, a new press of Fire opens Load Game (Open restarts the
     // level, as always; the death quote says both, C_PS3_UpdateDeadQuote)

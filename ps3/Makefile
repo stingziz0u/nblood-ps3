@@ -96,6 +96,21 @@ OBJDIR     := $(CURDIR)/obj-$(GAME)
 BUILDDIR   := $(CURDIR)/build-$(GAME)
 endif
 
+# DEBUG=1: the testing build (PS3_DEBUG_CHEATS): always immortal, every
+# weapon with ammo that doesn't run out, all the keys, L3 + R3 together
+# ends the level. Its own PKG (<target>-debug-<version>.pkg, "<title>
+# (debug)") and folders; the same APPID, so it installs over the game and
+# uses its data (the normal PKG installed again goes back).
+DEBUG ?= 0
+ifeq ($(DEBUG),1)
+TARGET     := $(TARGET)-debug
+TITLE      := $(TITLE) (debug)
+OUT_PKG    := $(TARGET)-$(VERSION).pkg
+PKGFILES   := $(PKGFILES)-debug
+OBJDIR     := $(OBJDIR)-debug
+BUILDDIR   := $(BUILDDIR)-debug
+endif
+
 CC         := ppu-gcc
 CXX        := ppu-g++
 LD         := ppu-g++
@@ -126,6 +141,9 @@ COMMON += -DHAVE_VORBIS -DHAVE_XMP -D_GNU_SOURCE=1 -DUSE_OPENGL
 COMMON += -DB_LITTLE_ENDIAN=0 -DB_BIG_ENDIAN=1
 COMMON += -D__PS3__ -DPS3_APPID=\"$(APPID)\" -DPS3_BUILD_DATE=\"$(BUILD_DATE)\"
 COMMON += -DPS3_VERSION=\"$(VERSION)\" -DPS3_PATCHLEVEL=$(PATCHLEVEL)
+ifeq ($(DEBUG),1)
+COMMON += -DPS3_DEBUG_CHEATS
+endif
 ifeq ($(GAME),blood)
 COMMON += -DPS3_GAME_BLOOD -DNOONE_EXTENSIONS
 else

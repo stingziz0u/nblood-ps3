@@ -21,6 +21,9 @@ const char *PS3_ButtonName(int nButton);
 bool PS3_DeathPromptShown(void);
 void PS3_DrawDeathPrompt(void);
 void PS3_OpenLoadMenu(void);
+#ifdef PS3_DEBUG_CHEATS
+void PS3_DebugCheats(void);
+#endif
 
 // Save pictures: the view drawn by the classic renderer at 320x200 into
 // a tile (view.cpp), kept next to the save (gameNNNN.pic) and shown in

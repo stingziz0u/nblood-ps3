@@ -116,6 +116,60 @@ void PS3_OpenLoadMenu(void)
         gGameMenuMgr.Push(&menuLoadGame, -1);
 }
 
+#ifdef PS3_DEBUG_CHEATS
+// --------------------------------------------------------------------
+// The debug build (make -C ps3 DEBUG=1), for testing: always immortal;
+// every weapon (when the player starts) and infinite ammo; all the keys;
+// L3 + R3 together ends the level (as CALGON does). Each frame, from
+// ctrlGetInput.
+
+extern "C" int32_t PS3_PadHeldBits(void);   // ps3layer.cpp
+
+void PS3_DebugCheats(void)
+{
+    static int  nGivenTo = -1;
+    static bool bSkipHeld;
+
+    if (!gGameStarted || gGameOptions.nGameType != kGameTypeSinglePlayer || numplayers != 1
+        || !gMe || !gMe->pXSprite || gDemo.at1 || gGameMenuMgr.m_bActive)
+        return;
+
+    if (gMe->pXSprite->health <= 0)
+    {
+        nGivenTo = -1;
+        return;
+    }
+
+    if (!gMe->godMode)
+        playerSetGodMode(gMe, 1);
+
+    gInfiniteAmmo = true;
+
+    // the player's sprite changes with each level (and life): the
+    // weapons again then
+    if (nGivenTo != gMe->nSprite)
+    {
+        nGivenTo = gMe->nSprite;
+
+        for (int i = 0; i < kWeaponMax; i++)
+            gMe->hasWeapon[i] = 1;
+        for (int i = 0; i < 12; i++)
+            gMe->ammoCount[i] = gAmmoInfo[i].max;
+    }
+
+    for (int i = 1; i <= 6; i++)
+        gMe->hasKey[i] = 1;
+
+    int32_t const nHeld = PS3_PadHeldBits();
+    bool const bSkip = (nHeld & (1 << CONTROLLER_BUTTON_LEFTSTICK)) && (nHeld & (1 << CONTROLLER_BUTTON_RIGHTSTICK));
+
+    if (bSkip && !bSkipHeld)
+        levelEndLevel(kLevelExitNormal);
+
+    bSkipHeld = bSkip;
+}
+#endif
+
 // --------------------------------------------------------------------
 // Save pictures
 

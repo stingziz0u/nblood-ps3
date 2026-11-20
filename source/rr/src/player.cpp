@@ -3539,6 +3539,32 @@ static void P_LockOn(int const playerNum, input_t &input)
     input.q16horz = fix16_from_float((wantPitch - nowPitch) * follow);
 }
 
+#ifdef __PPU__
+extern float CONTROL_JoySensitivityUnit;   // control.cpp (in_joyunit)
+
+// PS3: a stick all the way moves as fast as the keys. mact (shared with the
+// newer games) gives an axis at most 32767 * in_joyunit (0.2) * its scale
+// (JoystickAnalogueScale / 24576): with Rednukem's default scale (65536)
+// that was about half of the 32767 this code divides by, so the player
+// walked at about half speed. The move is now taken against the axis's own
+// most; past it (a scale above its default) it stays clamped by MAXVEL.
+static int32_t P_PS3AnalogMove(int32_t const value, int32_t const function, int32_t const keyMove)
+{
+    int32_t scale = 0;
+
+    for (int i = 0; i < MAXJOYAXES; i++)
+        if (ud.config.JoystickAnalogueAxes[i] == function)
+        {
+            scale = ud.config.JoystickAnalogueScale[i];
+            break;
+        }
+
+    float const extent = 32767.f * CONTROL_JoySensitivityUnit * (float)(scale > 0 ? scale : DEFAULTJOYSTICKANALOGUESCALE) / 24576.f;
+
+    return (int32_t)((float)value * (float)keyMove / max(extent, 1.f));
+}
+#endif
+
 void P_GetInput(int playerNum)
 {
     auto const pPlayer = g_player[playerNum].ps;
@@ -3628,8 +3654,13 @@ void P_GetInput(int playerNum)
     if (ud.mouseflip) input.q16horz = -input.q16horz;
 
     input.q16horz -= fix16_from_int(info.dpitch) / analogExtent * analogTurnAmount;
+#ifdef __PPU__
+    input.svel -= P_PS3AnalogMove(info.dx, analog_strafing, keyMove);
+    input.fvel -= P_PS3AnalogMove(info.dz, analog_moving, keyMove);
+#else
     input.svel -= info.dx * keyMove / analogExtent;
     input.fvel -= info.dz * keyMove / analogExtent;
+#endif
 
     if (BUTTON(gamefunc_Strafe))
     {
@@ -3919,8 +3950,13 @@ void P_GetInputMotorcycle(int playerNum)
     if (ud.mouseflip) input.q16horz = -input.q16horz;
 
     input.q16horz -= fix16_from_int(info.dpitch) / analogExtent * analogTurnAmount;
+#ifdef __PPU__
+    input.svel -= P_PS3AnalogMove(info.dx, analog_strafing, keyMove);
+    input.fvel -= P_PS3AnalogMove(info.dz, analog_moving, keyMove);
+#else
     input.svel -= info.dx * keyMove / analogExtent;
     input.fvel -= info.dz * keyMove / analogExtent;
+#endif
 
     input.fvel = clamp(input.fvel, -MAXVEL, MAXVEL);
     input.svel = clamp(input.svel, -MAXSVEL, MAXSVEL);
@@ -4221,8 +4257,13 @@ void P_GetInputBoat(int playerNum)
     if (ud.mouseflip) input.q16horz = -input.q16horz;
 
     input.q16horz -= fix16_from_int(info.dpitch) / analogExtent * analogTurnAmount;
+#ifdef __PPU__
+    input.svel -= P_PS3AnalogMove(info.dx, analog_strafing, keyMove);
+    input.fvel -= P_PS3AnalogMove(info.dz, analog_moving, keyMove);
+#else
     input.svel -= info.dx * keyMove / analogExtent;
     input.fvel -= info.dz * keyMove / analogExtent;
+#endif
 
     input.fvel = clamp(input.fvel, -MAXVEL, MAXVEL);
     input.svel = clamp(input.svel, -MAXSVEL, MAXSVEL);
@@ -4547,8 +4588,13 @@ void P_DHGetInput(int const playerNum)
     if (ud.mouseflip) input.q16horz = -input.q16horz;
 
     input.q16horz -= fix16_from_int(info.dpitch) / analogExtent * analogTurnAmount;
+#ifdef __PPU__
+    input.svel -= P_PS3AnalogMove(info.dx, analog_strafing, keyMove);
+    input.fvel -= P_PS3AnalogMove(info.dz, analog_moving, keyMove);
+#else
     input.svel -= info.dx * keyMove / analogExtent;
     input.fvel -= info.dz * keyMove / analogExtent;
+#endif
 
     if (BUTTON(gamefunc_Strafe))
     {

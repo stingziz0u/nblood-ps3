@@ -285,6 +285,10 @@ void ctrlGetInput(void)
 
     CONTROL_ProcessBinds();
 
+#ifdef PS3_DEBUG_CHEATS
+    PS3_DebugCheats();
+#endif
+
 #ifdef __PPU__
     // dead in a single player game: a new press of Weapon_Fire's button
     // opens Load Game (Open restarts the level, as always); the one held
