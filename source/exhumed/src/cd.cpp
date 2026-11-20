@@ -49,6 +49,13 @@ void setCDaudiovolume(int val)
     }
 }
 
+#ifdef __PPU__
+// PS3: MUSIC off in the OPTIONS (mus_enabled) plays no track; on again,
+// the last one asked for comes back if it was the level's (it loops)
+static int ps3_lastTrack = -1;
+static bool ps3_lastLoop;
+#endif
+
 bool playCDtrack(int nTrack, bool bLoop)
 {
 //  if (!MusicToggle)
@@ -61,6 +68,14 @@ bool playCDtrack(int nTrack, bool bLoop)
     }
 
     StopCD();
+
+#ifdef __PPU__
+    ps3_lastTrack = nTrack;
+    ps3_lastLoop = bLoop;
+
+    if (!MusicToggle)
+        return false;
+#endif
 
     char filename[BMAX_PATH];
     int32_t hFile = -1;
@@ -156,6 +171,16 @@ bool CDplaying()
         return FX_SoundActive(trackhandle);
     }
 }
+
+#ifdef __PPU__
+void PS3_MusicToggled(void)
+{
+    if (!MusicToggle)
+        StopCD();
+    else if (!CDplaying() && ps3_lastTrack >= 2 && ps3_lastLoop)
+        playCDtrack(ps3_lastTrack, true);
+}
+#endif
 
 void StopCD()
 {

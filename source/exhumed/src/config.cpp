@@ -441,6 +441,12 @@ static void CONFIG_PS3_SetGameControllerDefaults(void)
     for (auto const &b : buttons)
         CONFIG_SetJoystickButtonFunction(b.button, 0, b.function);
 }
+
+// the OPTIONS' RESET CONTROLLER (ps3options.cpp): the defaults, mapped
+void CONFIG_PS3_ResetController(void)
+{
+    CONFIG_PS3_SetGameControllerDefaults();
+}
 #endif
 
 

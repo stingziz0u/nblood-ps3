@@ -1676,9 +1676,17 @@ int menu_Menu(int bInLevelMenus)
                 shade = 25;
             }
 
+#ifdef __PPU__
+            // PS3: OPTIONS in VOLUME's place (ps3options.cpp)
+            int const nPic = (j == kMenuVolume) ? PS3_OptionsTile() : kMenuNewGameTile + j;
+            picanm[nPic].xofs = 0;
+            picanm[nPic].yofs = 0;
+            rotatesprite(160 << 16, (y + tilesiz[nPic].y) << 16, zoomsize, 0, nPic, shade, 0, 2, 0, 0, xdim, ydim);
+#else
             picanm[j + kMenuNewGameTile].xofs = 0;
             picanm[j + kMenuNewGameTile].yofs = 0;
             rotatesprite(160 << 16, (y + tilesiz[j + kMenuNewGameTile].y) << 16, zoomsize, 0, kMenuNewGameTile + j, shade, 0, 2, 0, 0, xdim, ydim);
+#endif
 
             y += 22;
         }
@@ -1813,7 +1821,11 @@ LABEL_21:
 
                 case kMenuVolume:
                 {
+#ifdef __PPU__
+                    PS3_OptionsMenu();
+#else
                     menu_AdjustVolume();
+#endif
                     menu_ResetZoom();
                     menu_ResetKeyTimer();
                     break;

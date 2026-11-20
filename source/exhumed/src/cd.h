@@ -30,6 +30,9 @@ void StartfadeCDaudio();
 int StepFadeCDaudio();
 bool CDplaying();
 void StopCD();
+#ifdef __PPU__
+void PS3_MusicToggled(void);   // the OPTIONS' MUSIC (ps3options.cpp)
+#endif
 int fadecdaudio();
 
 #endif

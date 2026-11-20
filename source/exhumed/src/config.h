@@ -127,6 +127,13 @@ void SetupInput();
 void LoadConfig();
 int CONFIG_ReadSetup();
 void CONFIG_WriteSetup(uint32_t flags);
+#ifdef __PPU__
+void CONFIG_PS3_ResetController(void);
+extern int32_t ps3_rumble;          // ps3options.cpp (cvar in_rumble)
+void PS3_OptionsMenu(void);         // ps3options.cpp: menu.cpp's OPTIONS
+int  PS3_OptionsTile(void);
+void PS3_Rumble(void);              // input.cpp, every tic played
+#endif
 
 extern int lMouseSens;
 

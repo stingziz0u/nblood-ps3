@@ -87,8 +87,10 @@ extern uint32_t ps3_ex_inputtime;   // ps3/source/ps3_game_exhumed.cpp
 void GetLocalInput()
 {
 #ifdef __PPU__
-    // PS3: playing (the pad is the controller, not keys: ps3layer.cpp)
+    // PS3: playing (the pad is the controller, not keys: ps3layer.cpp);
+    // the vibration (ps3options.cpp)
     ps3_ex_inputtime = timerGetTicks();
+    PS3_Rumble();
 #endif
     int i;
     for (i = 6; i >= 0; i--)

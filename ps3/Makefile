@@ -258,7 +258,7 @@ EXHUMED_CPP := aistuff anims anubis bubbles bullet cd common config enginesubs \
 	lighting lion map memorystream menu mono move movie mummy network object \
 	osdcmds player queen ra ramses random rat record rex roach runlist save \
 	scorp sequence serial set snake sound spider status stream switch text2 \
-	timer trigdat version view wasp
+	timer trigdat version view wasp ps3options
 
 # The PS3 pieces that are part of the game (renamed with the engine):
 # what the layer asks of the game.
@@ -338,7 +338,7 @@ $(OBJDIR)/ps3/ps3_video.o: PCFLAGS := $(filter-out -O2,$(PCFLAGS)) -O1 -fno-inli
 # logic keep direct TOC access. 'make check' (after every link) fails the
 # build if .got reaches 0x10000 or any r2off stub shows up.
 ifeq ($(GAME_SRC),exhumed)
-MINTOC_GAME := $(patsubst %,$(OBJDIR)/exhumed/%.o,menu config osdcmds grpscan common \
+MINTOC_GAME := $(patsubst %,$(OBJDIR)/exhumed/%.o,menu ps3options config osdcmds grpscan common \
 	init save record network serial mono version exscript text2 movie cd \
 	memorystream stream trigdat)
 else ifeq ($(GAME_SRC),rr)

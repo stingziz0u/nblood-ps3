@@ -669,6 +669,9 @@ int32_t registerosdcommands(void)
         { "in_mousemode", "toggles vertical mouse view", (void *)&aimmode, CVAR_BOOL, 0, 1 },
 
         { "mus_enabled", "enables/disables music", (void *)&MusicToggle, CVAR_BOOL, 0, 1 },
+#ifdef __PPU__
+        { "in_rumble", "PS3: the DualShock 3 shakes when the player is hurt", (void *)&ps3_rumble, CVAR_BOOL, 0, 1 },
+#endif
         { "mus_volume", "controls music volume", (void *)&MusicVolume, CVAR_INT, 0, 255 },
 
         //{ "osdhightile", "enable/disable hires art replacements for console text", (void *)&osdhightile, CVAR_BOOL, 0, 1 },
