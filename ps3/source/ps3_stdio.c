@@ -221,6 +221,20 @@ FixPath(const char *path, char *out, size_t size)
 		snprintf(tmp, sizeof(tmp), "%s/%s", PS3_USRDIR, path);
 	}
 
+	/* DOS paths: "Route66\Start.map" (Suckin' Grits' USER66.CON); a PS3
+	   name has no backslash in it */
+	{
+		char *b;
+
+		for (b = tmp; *b; b++)
+		{
+			if (*b == '\\')
+			{
+				*b = '/';
+			}
+		}
+	}
+
 	for (s = tmp; *s && o + 1 < size; s++)
 	{
 		if (*s == '/' && o > 0 && out[o - 1] == '/')

@@ -56,7 +56,9 @@
 #define RETURN_MARKER PS3_USRDIR "/ps3_return_to_launcher"
 #define RELOAD_SELF   PS3_USRDIR "/RELOAD.SELF"
 
-/* The games this program plays, by their group file's name */
+/* The games this program plays, by their group file's name (or, for an
+   add-on that is loose files over the base game's group, one of its
+   files: Suckin' Grits' USER66.CON) */
 typedef struct
 {
     const char *file;
@@ -90,6 +92,11 @@ static const known_t known[] =
     { "REDNECK.GRP", "Redneck Rampage Rides Again", "rrra", 0 },
 #else
     { "REDNECK.GRP", "Redneck Rampage",             "rr",   0 },
+    /* Suckin' Grits on Route 66: loose files (its GAME.CON, the *66.CON,
+       two ART files, its maps in ROUTE66/) in a folder of addons
+       (addons/route66/), over REDNECK.GRP. Its folder first in the search
+       path, so its GAME.CON and art are found before the group's. */
+    { "USER66.CON",  "Suckin' Grits on Route 66",   "route66", 1 },
 #endif
 };
 #elif defined PS3_GAME_SW
@@ -372,8 +379,10 @@ ArgsForEntry(const entry_t *e)
         AddArg(path);
     }
 #else
+    /* the game's group file; an add-on of loose files (a .CON): the base
+       game's */
     AddArg("-gamegrp");
-    AddArg(e->known >= 0 ? e->file : found_file[base]);
+    AddArg(e->known >= 0 && !HasExtension(e->file, ".con") ? e->file : found_file[base]);
 
     if (e->known < 0)
     {
@@ -649,6 +658,17 @@ ScanGames(void)
         if (known[i].needs_base && !found_dir[base][0])
         {
             PS3_Log("Launcher: %s needs %s, not found", known[i].file, BASE_FILE);
+            continue;
+        }
+
+        /* loose add-on files in USRDIR or addons itself (both always in
+           the search path) would be the base game's too, its GAME.CON
+           found first: only in a folder of addons */
+        if (HasExtension(known[i].file, ".con") &&
+            (!strcmp(found_dir[i], PS3_USRDIR) || !strcmp(found_dir[i], ADDONS_DIR)))
+        {
+            PS3_Log("Launcher: %s in %s: it goes in a folder of addons (addons/route66), not played",
+                    known[i].file, found_dir[i]);
             continue;
         }
 

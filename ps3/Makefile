@@ -543,6 +543,11 @@ ifeq ($(GAME_SRC),rr)
 # the folder to the search path)
 PKG_DIRS += USRDIR/music
 endif
+ifeq ($(GAME),rr)
+# Suckin' Grits on Route 66: its loose files over REDNECK.GRP
+# (ps3_launcher.c), with its maps in addons/route66/ROUTE66
+PKG_DIRS += USRDIR/addons/route66 USRDIR/addons/route66/ROUTE66
+endif
 
 pkgdirs:
 	@for d in $(PKG_DIRS); do mkdir -p "$(PKGFILES)/$$d"; done
