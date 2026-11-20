@@ -91,7 +91,12 @@ int32_t g_Shareware = 0;
 // This was 32 for a while, but I think lowering it to 24 will help things like the Dingoo.
 // Ideally, we would look at our memory usage on our most cramped platform and figure out
 // how much of that is needed for the underlying OS and things like SDL instead of guessing
-#ifndef GEKKO
+#if defined __PPU__
+// PS3: about 213 MB for everything. At most this much: tiles.cpp makes it
+// the size of the art there is (Redneck Rampage has more than the other
+// Build games).
+int32_t MAXCACHE1DSIZE = (96*1024*1024);
+#elif !defined GEKKO
 int32_t MAXCACHE1DSIZE = (96*1024*1024*2);
 #else
 int32_t MAXCACHE1DSIZE = (8*1024*1024);
@@ -1132,8 +1137,17 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
             if (waloff[TILE_SAVESHOT] == 0)
                 g_cache.allocateBlock(&waloff[TILE_SAVESHOT],200*320,&walock[TILE_SAVESHOT]);
 
+#ifdef __PPU__
+            // PS3: the save's picture drawn by the classic renderer into
+            // the tile, with Polymost too (EDuke32-PS3's Duke): the RSX's
+            // frame can't be read back (glReadPixels gives black).
+            // renderSetTarget switches to REND_CLASSIC until
+            // renderRestoreTarget below.
+            renderSetTarget(TILE_SAVESHOT, 200, 320);
+#else
             if (videoGetRenderMode() == REND_CLASSIC)
                 renderSetTarget(TILE_SAVESHOT, 200, 320);
+#endif
         }
         else if (screenTilting)
         {
@@ -1510,6 +1524,9 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
 
             tileInvalidate(TILE_SAVESHOT, 0, 255);
 
+#ifdef __PPU__
+            renderRestoreTarget();   // (see renderSetTarget above)
+#else
             if (videoGetRenderMode() == REND_CLASSIC)
             {
                 renderRestoreTarget();
@@ -1518,6 +1535,7 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
 #ifdef USE_OPENGL
             else
                 G_ReadGLFrame();
+#endif
 #endif
         }
         else if (screenTilting)

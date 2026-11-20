@@ -76,6 +76,22 @@ static const known_t known[] =
     { "BLOOD.RFF",   "Blood",           "blood",   0 },
     { "CRYPTIC.INI", "Cryptic Passage", "cryptic", 1 },
 };
+#elif defined PS3_GAME_RR
+/* Rednukem: Redneck Rampage's and Rides Again's data are both a
+   REDNECK.GRP (grpscan.cpp tells them apart by its checksum): one game
+   per package, each in its own USRDIR */
+#define LAUNCHER_TITLE PS3_LAUNCHER_NAME
+#define PROGRAM_NAME   "rednukem"
+#define BASE_FILE      "REDNECK.GRP"
+#define MUSIC_DIR      PS3_USRDIR "/music"
+static const known_t known[] =
+{
+#ifdef PS3_GAME_RRRA
+    { "REDNECK.GRP", "Redneck Rampage Rides Again", "rrra", 0 },
+#else
+    { "REDNECK.GRP", "Redneck Rampage",             "rr",   0 },
+#endif
+};
 #elif defined PS3_GAME_SW
 #define LAUNCHER_TITLE "VOIDSW"
 #define PROGRAM_NAME   "voidsw"
@@ -334,6 +350,12 @@ ArgsForEntry(const entry_t *e)
     /* the base game, wherever it is, for an add-on or a mod */
     if (e->known < 0 || known[e->known].needs_base)
         AddSearchPath(found_dir[base]);
+
+#ifdef MUSIC_DIR
+    /* the CD soundtrack (track02.ogg ...), found by its name */
+    if (IsDir(MUSIC_DIR))
+        AddSearchPath(MUSIC_DIR);
+#endif
 
 #ifdef PS3_GAME_BLOOD
     /* NBlood: the episodes' .INI (BLOOD.INI by default), a group file on

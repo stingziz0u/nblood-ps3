@@ -4,6 +4,8 @@
 # From the root of the tree (~/NBlood-PS3):
 #
 #   make -C ps3            -> ps3/nblood-ps3-<version>.pkg (Blood)
+#   make -C ps3 GAME=rr    -> ps3/redneck-ps3-<version>.pkg (Redneck Rampage)
+#   make -C ps3 GAME=rrra  -> ps3/redneckra-ps3-<version>.pkg (Rides Again)
 #   make -C ps3 clean
 #   make -C ps3 verify     -> patch level of the tree and of the PKG
 #   make -C ps3 check-toolchain
@@ -62,14 +64,36 @@ ESRC       := $(SRC)/source
 OBJDIR     := $(CURDIR)/obj
 BUILDDIR   := $(CURDIR)/build
 
-# The game: NBlood (Blood), the only one so far; Rednukem (Redneck
-# Rampage) and PCExhumed (PowerSlave) live in the same tree for later.
+# The game: NBlood (Blood, the default), or Rednukem with GAME=rr
+# (Redneck Rampage) and GAME=rrra (Redneck Rampage Rides Again): one
+# program for both, two packages (both games' data is a REDNECK.GRP, so
+# each has its own USRDIR). PCExhumed (PowerSlave) lives in the same tree
+# for later. Each game builds in its own folders.
 GAME       ?= blood
 
 ifeq ($(GAME),blood)
 GAME_SRC   := blood
+else ifeq ($(GAME),rr)
+TARGET     := redneck-ps3
+TITLE      := Redneck Rampage
+APPID      := REDNECKRM
+GAME_SRC   := rr
+else ifeq ($(GAME),rrra)
+TARGET     := redneckra-ps3
+TITLE      := Redneck Rampage Rides Again
+APPID      := REDNECKRA
+GAME_SRC   := rr
 else
-$(error GAME is blood)
+$(error GAME is blood, rr or rrra)
+endif
+
+ifneq ($(GAME),blood)
+CONTENTID  := UP0001-$(APPID)_00-0000000000000000
+PKGFILES   := $(CURDIR)/pkgfiles-$(GAME)
+ICON0      := $(CURDIR)/ICON0-$(GAME).PNG
+OUT_PKG    := $(TARGET)-$(VERSION).pkg
+OBJDIR     := $(CURDIR)/obj-$(GAME)
+BUILDDIR   := $(CURDIR)/build-$(GAME)
 endif
 
 CC         := ppu-gcc
@@ -102,7 +126,14 @@ COMMON += -DHAVE_VORBIS -DHAVE_XMP -D_GNU_SOURCE=1 -DUSE_OPENGL
 COMMON += -DB_LITTLE_ENDIAN=0 -DB_BIG_ENDIAN=1
 COMMON += -D__PS3__ -DPS3_APPID=\"$(APPID)\" -DPS3_BUILD_DATE=\"$(BUILD_DATE)\"
 COMMON += -DPS3_VERSION=\"$(VERSION)\" -DPS3_PATCHLEVEL=$(PATCHLEVEL)
+ifeq ($(GAME),blood)
 COMMON += -DPS3_GAME_BLOOD -DNOONE_EXTENSIONS
+else
+COMMON += -DPS3_GAME_RR
+ifeq ($(GAME),rrra)
+COMMON += -DPS3_GAME_RRRA
+endif
+endif
 
 INCLUDES := -I$(ESRC)/build/include -I$(ESRC)/mact/include -I$(ESRC)/audiolib/include
 INCLUDES += -I$(ESRC)/libxmp-lite/include -I$(ESRC)/glad/include -I$(CURDIR)/source -I$(CURDIR)/compat
@@ -126,7 +157,14 @@ PCFLAGS  := -O2 -std=gnu99 -Wall -fno-strict-aliasing -fno-common -mcpu=cell $(M
 PCFLAGS  += -Werror=implicit-function-declaration -Werror=int-conversion -MMD -MP
 PCFLAGS  += -DPS3_APPID=\"$(APPID)\" -DPS3_BUILD_DATE=\"$(BUILD_DATE)\"
 PCFLAGS  += -I$(CURDIR)/source -I$(CURDIR)/compat $(LIBPSL1GHT_INC)
+ifeq ($(GAME),blood)
 PCFLAGS  += -DPS3_GAME_BLOOD
+else
+PCFLAGS  += -DPS3_GAME_RR
+ifeq ($(GAME),rrra)
+PCFLAGS  += -DPS3_GAME_RRRA
+endif
+endif
 
 # -lrt and -llv2 are MANDATORY: without them the binary links cleanly, the
 # PKG installs, and it never reaches main(). Black screen, back to the XMB,
@@ -176,10 +214,24 @@ XMP_C     := common control dataio effects filter format hio it_load itsex lfo l
 	load_helpers memio mix_all mixer mod_load mtm_load period player read_event \
 	s3m_load sample scan smix virtual win32 xm_load
 
+# Rednukem's (GNUmakefile's rr_game_objs and its n64 folder, Duke 64's
+# code: game.cpp calls it)
+RR_CPP    := game global actors gamedef gameexec gamevars player premap sector anim \
+	common config demo input menus namesdyn net savegame rts osdfuncs osdcmds \
+	grpscan sounds soundsdyn cheats sbar screentext screens cmdline rrdh \
+	filestream playmve \
+	$(addprefix n64/,reality reality_music reality_player reality_render \
+		reality_sbar reality_screens reality_sound reality_util)
+
 # The PS3 pieces that are part of the game (renamed with the engine):
 # what the layer asks of the game.
+ifeq ($(GAME),blood)
 GAME_CPP    := $(BLOOD_CPP)
 GAMEPS3_CPP := ps3_game_blood
+else
+GAME_CPP    := $(RR_CPP)
+GAMEPS3_CPP := ps3_game_rr
+endif
 
 ENGINE_OBJS := \
 	$(patsubst %,$(OBJDIR)/build/%.o,$(BUILD_CPP) $(BUILD_C)) \
@@ -245,13 +297,21 @@ $(OBJDIR)/ps3/ps3_video.o: PCFLAGS := $(filter-out -O2,$(PCFLAGS)) -O1 -fno-inli
 # TOC entry per file); the renderer, the game's VM and the per-tic game
 # logic keep direct TOC access. 'make check' (after every link) fails the
 # build if .got reaches 0x10000 or any r2off stub shows up.
+ifeq ($(GAME_SRC),rr)
+MINTOC_GAME := $(patsubst %,$(OBJDIR)/rr/%.o,menus osdcmds osdfuncs config cmdline \
+	grpscan savegame demo anim premap rts gamedef global cheats net common screens \
+	screentext sbar rrdh filestream playmve namesdyn soundsdyn \
+	$(addprefix n64/,reality reality_music reality_player reality_render \
+		reality_sbar reality_screens reality_sound reality_util))
+else
 MINTOC_GAME := $(patsubst %,$(OBJDIR)/blood/%.o,menu gamemenu config osdcmd levels \
 	loadsave credits demo network inifile getopt common resource iob endgame \
 	messages replace barf controls blood qheap map2d tile nnextsif nnextstr \
 	nnextcitem aibat aibeast aiboneel aiburn aicaleb aicerber aicult aigarg \
 	aighost aigilbst aihand aihound aiinnoc aipod airat aispid aitchern aizomba \
-	aizombf aicdud aipatrol nnextslaser nnextcdud) \
-	$(patsubst %,$(OBJDIR)/smk/%.o,$(SMK_CPP))
+	aizombf aicdud aipatrol nnextslaser nnextcdud)
+endif
+MINTOC_GAME += $(patsubst %,$(OBJDIR)/smk/%.o,$(SMK_CPP))
 
 MINTOC_OBJS := \
 	$(MINTOC_GAME) \
@@ -360,6 +420,15 @@ $(OBJDIR)/blood/%.o: $(ESRC)/blood/src/%.cpp
 	@echo "CXX blood/$*.cpp"
 	@$(CXX) $(CXXFLAGS) $(BLOODWARN) -I$(ESRC)/blood/src -c $< -o $@
 
+# Rednukem's: its own warnings off as upstream builds it; packed structs
+# too (actors.h, player.h...), so the same care as Blood's
+RRWARN := -Wno-sign-compare -Wno-maybe-uninitialized -Wno-format-overflow -mstrict-align
+
+$(OBJDIR)/rr/%.o: $(ESRC)/rr/src/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "CXX rr/$*.cpp"
+	@$(CXX) $(CXXFLAGS) $(RRWARN) -I$(ESRC)/rr/src -c $< -o $@
+
 $(OBJDIR)/smk/%.o: $(ESRC)/libsmackerdec/src/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "CXX libsmackerdec/$*.cpp"
@@ -451,6 +520,11 @@ open('$(ICON0)','wb').write(b'\x89PNG\r\n\x1a\n'+png(b'IHDR',struct.pack('>IIBBB
 # the game itself, if wanted) instead of USRDIR, each in a folder of its
 # own if wanted (ps3_launcher.c).
 PKG_DIRS := USRDIR/addons
+ifeq ($(GAME_SRC),rr)
+# Redneck Rampage's CD soundtrack: track02.ogg ... (ps3_launcher.c adds
+# the folder to the search path)
+PKG_DIRS += USRDIR/music
+endif
 
 pkgdirs:
 	@for d in $(PKG_DIRS); do mkdir -p "$(PKGFILES)/$$d"; done
@@ -459,7 +533,9 @@ $(TARGET).pkg: $(PKGFILES)/USRDIR/VERSION.TXT $(ICON0) | pkgdirs
 
 # NBlood's own data (its menu art, its blood.def): nblood.pk3, from the
 # root of the tree, in USRDIR as on every other platform
+ifeq ($(GAME),blood)
 $(TARGET).pkg: $(PKGFILES)/USRDIR/nblood.pk3
+endif
 
 $(PKGFILES)/USRDIR/nblood.pk3: $(SRC)/nblood.pk3
 	@mkdir -p $(dir $@)

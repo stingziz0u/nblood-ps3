@@ -1601,6 +1601,18 @@ static void NoDataScreen(void)
         "or to its addons folder: BLOOD.RFF, BLOOD.INI,",
         "SOUNDS.RFF, GUI.RFF, SURFACE.DAT, TILES0xx.ART,",
         "VOXEL.DAT... (the whole game folder will do).",
+#elif defined PS3_GAME_RR
+#ifdef PS3_GAME_RRRA
+        "Copy the files of YOUR copy of Redneck Rampage",
+        "Rides Again (GOG's Collection, or the CD) to:",
+#else
+        "Copy the files of YOUR copy of Redneck Rampage",
+        "(GOG's Collection, or the CD) by FTP to:",
+#endif
+        "  " PS3_USRDIR "/",
+        "",
+        "or to its addons folder. At least REDNECK.GRP; the",
+        "music (track02.ogg ... track10.ogg) in the music folder.",
 #elif defined PS3_GAME_SW
         "Copy the files of YOUR copy of Shadow Warrior",
         "(GOG, Steam, CD or the shareware) by FTP to:",

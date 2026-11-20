@@ -232,8 +232,15 @@ void CONFIG_SetDefaults(void)
     else
 # endif
     {
+# ifdef __PPU__
+        // PS3: the internal resolution, which the RSX scales to the 720p
+        // output (as EDuke32-PS3's and NBlood-PS3's)
+        ud.setup.xdim = 848;
+        ud.setup.ydim = 480;
+# else
         ud.setup.xdim = 1024;
         ud.setup.ydim = 768;
+# endif
     }
 #endif
 
@@ -667,11 +674,21 @@ void CONFIG_SetGameControllerDefaults()
     static GameControllerButtonSetting const buttons[] =
     {
         { CONTROLLER_BUTTON_A, gamefunc_Open },
+#ifdef __PPU__
+        // PS3: EDuke32-PS3's Duke layout (newer EDuke32's): Circle uses the
+        // item, R3 toggles crouching
+        { CONTROLLER_BUTTON_B, gamefunc_Inventory },
+#else
         { CONTROLLER_BUTTON_B, gamefunc_Toggle_Crouch },
+#endif
         { CONTROLLER_BUTTON_Y, gamefunc_Quick_Kick },
         { CONTROLLER_BUTTON_BACK, gamefunc_Map },
         { CONTROLLER_BUTTON_LEFTSTICK,  gamefunc_Run },
+#ifdef __PPU__
+        { CONTROLLER_BUTTON_RIGHTSTICK, gamefunc_Toggle_Crouch },
+#else
         { CONTROLLER_BUTTON_RIGHTSTICK, gamefunc_Crouch },
+#endif
         { CONTROLLER_BUTTON_DPAD_UP,    gamefunc_Previous_Weapon },
         { CONTROLLER_BUTTON_DPAD_DOWN,  gamefunc_Next_Weapon },
         { CONTROLLER_BUTTON_LEFTSHOULDER,  gamefunc_Crouch },

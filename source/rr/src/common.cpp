@@ -341,6 +341,19 @@ void G_ScanGroups(void)
         }
     }
 
+#ifdef __PPU__
+    // PS3: the launcher names the game (-gamegrp). A file this Rednukem
+    // doesn't know (its checksum isn't in grpscan.cpp's table) isn't
+    // playable: say so, instead of quietly playing another game found
+    // (as EDuke32-PS3's).
+    if (g_selectedGrp == NULL && g_grpNamePtr != NULL)
+    {
+        wm_msgbox("Unknown game data", "%s is not a version of a game this Rednukem knows "
+                  "(its checksum is in grpfiles.cache).", g_grpNamePtr);
+        Bexit(EXIT_FAILURE);
+    }
+#endif
+
     if (g_selectedGrp == NULL)
         g_selectedGrp = foundgrps;
 }

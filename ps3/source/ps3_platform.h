@@ -35,7 +35,7 @@ extern "C" {
 #endif
 
 /* The game this build is (ps3/Makefile: EDuke32-PS3's GAME=duke3d or
-   GAME=sw, NBlood-PS3's GAME=blood) */
+   GAME=sw, NBlood-PS3's GAME=blood, rr or rrra) */
 #if defined PS3_GAME_BLOOD
 #define PS3_GAME_NAME     "NBlood"
 #define PS3_PROGRAM       "nblood-ps3"
@@ -45,6 +45,24 @@ extern "C" {
 #ifndef PS3_APPID
 #define PS3_APPID "NBLOODPS3"
 #endif
+#elif defined PS3_GAME_RR
+/* Rednukem: one program, two packages (GAME=rr / GAME=rrra) */
+#define PS3_GAME_NAME     "Rednukem"
+#ifdef PS3_GAME_RRRA
+#define PS3_PROGRAM       "redneckra-ps3"
+#define PS3_LAUNCHER_NAME "REDNECK RAMPAGE RIDES AGAIN"
+#ifndef PS3_APPID
+#define PS3_APPID "REDNECKRA"
+#endif
+#else
+#define PS3_PROGRAM       "redneck-ps3"
+#define PS3_LAUNCHER_NAME "REDNECK RAMPAGE"
+#ifndef PS3_APPID
+#define PS3_APPID "REDNECKRM"
+#endif
+#endif
+#define PS3_THREAD_NAME   "rrgame"
+#define PS3_GAME_SW_OR(sw, duke) (duke)
 #elif defined PS3_GAME_SW
 #define PS3_GAME_NAME   "VoidSW"
 #define PS3_PROGRAM     "voidsw-ps3"

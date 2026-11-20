@@ -6,3 +6,7 @@
 /*.pkg
 /pkgfiles/USRDIR/VERSION.TXT
 /pkgfiles/USRDIR/nblood.pk3
+# GAME=rr / GAME=rrra: each game's own
+/obj-*/
+/build-*/
+/pkgfiles-*/
