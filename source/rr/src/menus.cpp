@@ -598,7 +598,12 @@ MAKE_MENU_TOP_ENTRYLINK( "Sound Setup", MEF_OptionsMenu, OPTIONS_SOUNDSETUP, MEN
 MAKE_MENU_TOP_ENTRYLINK( "Display Setup", MEF_OptionsMenu, OPTIONS_DISPLAYSETUP, MENU_DISPLAYSETUP );
 MAKE_MENU_TOP_ENTRYLINK( "Player Setup", MEF_OptionsMenu, OPTIONS_PLAYERSETUP, MENU_PLAYER );
 #ifndef EDUKE32_ANDROID_MENU
+#ifdef __PPU__
+// PS3: Control Setup had one entry (Controller Setup): straight to it
+MAKE_MENU_TOP_ENTRYLINK( "Control Setup", MEF_OptionsMenu, OPTIONS_CONTROLS, MENU_JOYSTICKSETUP );
+#else
 MAKE_MENU_TOP_ENTRYLINK( "Control Setup", MEF_OptionsMenu, OPTIONS_CONTROLS, MENU_CONTROLS );
+#endif
 
 MAKE_MENU_TOP_ENTRYLINK( "Keyboard Setup", MEF_BigOptionsRtSections, OPTIONS_KEYBOARDSETUP, MENU_KEYBOARDSETUP );
 MAKE_MENU_TOP_ENTRYLINK( "Mouse Setup", MEF_BigOptionsRtSections, OPTIONS_MOUSESETUP, MENU_MOUSESETUP );
@@ -1792,7 +1797,11 @@ static Menu_t Menus[] = {
     { &M_VIDEOSETUP, MENU_VIDEOSETUP, MENU_DISPLAYSETUP, MA_Return, Menu },
     { &M_KEYBOARDSETUP, MENU_KEYBOARDSETUP, MENU_CONTROLS, MA_Return, Menu },
     { &M_MOUSESETUP, MENU_MOUSESETUP, MENU_CONTROLS, MA_Return, Menu },
+#ifdef __PPU__
+    { &M_JOYSTICKSETUP, MENU_JOYSTICKSETUP, MENU_OPTIONS, MA_Return, Menu },   // (see OPTIONS_CONTROLS)
+#else
     { &M_JOYSTICKSETUP, MENU_JOYSTICKSETUP, MENU_CONTROLS, MA_Return, Menu },
+#endif
     { &M_JOYSTICKBTNS, MENU_JOYSTICKBTNS, MENU_JOYSTICKSETUP, MA_Return, Menu },
     { &M_JOYSTICKAXES, MENU_JOYSTICKAXES, MENU_JOYSTICKADV, MA_Return, Menu },
     { &M_KEYBOARDKEYS, MENU_KEYBOARDKEYS, MENU_KEYBOARDSETUP, MA_Return, Menu },
@@ -7750,6 +7759,207 @@ static void Menu_RunInput_FileSelect_Select(MenuFileSelect_t *object)
     }
 }
 
+#ifdef __PPU__
+// ---------------------------------------------------------------------
+// PS3: the on-screen keyboard (NBlood-PS3's): what I_EnterText does with
+// a keyboard, with the DualShock 3, for the save names, the player name
+// and the cheat entry. D-pad: move; Cross: type the key; Square: erase;
+// Triangle: space; Start: done; Circle: cancel. Drawn over the menu
+// (M_DisplayMenus) on the frames something is being typed.
+// ---------------------------------------------------------------------
+
+extern "C" int32_t PS3_PadHeldBits(void);   // ps3layer.cpp
+
+static char const *const ps3OskRows[3] = { "ABCDEFGHIJKLM", "NOPQRSTUVWXYZ", "0123456789.-_" };
+static char const *const ps3OskSpecial[4] = { "SHIFT", "SPACE", "ERASE", "DONE" };
+enum { PS3_OSK_COLS = 13, PS3_OSK_ROWS = 4, PS3_OSK_SPECIAL = 3 };
+static int ps3OskRow, ps3OskCol;
+static bool ps3OskLower;
+static char const *ps3OskText;   // being typed this frame (drawn, then forgotten)
+
+static void PS3_OskMove(int const dx, int const dy)
+{
+    if (dy)
+    {
+        int const oldRow = ps3OskRow;
+        ps3OskRow = (ps3OskRow + dy + PS3_OSK_ROWS) % PS3_OSK_ROWS;
+        if (oldRow == PS3_OSK_SPECIAL && ps3OskRow != PS3_OSK_SPECIAL)
+            ps3OskCol = ps3OskCol * PS3_OSK_COLS / 4 + 1;
+        else if (oldRow != PS3_OSK_SPECIAL && ps3OskRow == PS3_OSK_SPECIAL)
+            ps3OskCol = ps3OskCol * 4 / PS3_OSK_COLS;
+    }
+
+    if (dx)
+    {
+        int const n = ps3OskRow == PS3_OSK_SPECIAL ? 4 : PS3_OSK_COLS;
+        ps3OskCol = (ps3OskCol + dx + n) % n;
+    }
+}
+
+static char PS3_OskChar(int const row, int const col)
+{
+    char ch = ps3OskRows[row][col];
+    if (ps3OskLower && ch >= 'A' && ch <= 'Z')
+        ch += 'a' - 'A';
+    return ch;
+}
+
+static void PS3_OskType(char *t, int32_t maxlength, int32_t flags, char ch)
+{
+    int32_t const len = Bstrlen(t);
+
+    if (len < maxlength && (!(flags & INPUT_NUMERIC) || (ch >= '0' && ch <= '9')))
+    {
+        t[len] = ch;
+        t[len+1] = 0;
+    }
+}
+
+static void PS3_OskErase(char *t)
+{
+    int32_t const len = Bstrlen(t);
+    if (len > 0)
+        t[len-1] = 0;
+}
+
+// I_EnterText with the pad: 1 done, -1 cancelled, 0 still typing
+static int32_t PS3_OskEnterText(char *t, int32_t maxlength, int32_t flags)
+{
+    ps3OskText = t;
+
+    // the presses of this frame (ps3layer.cpp: a button's bit comes up
+    // once, when it goes down) and what is held now
+    int32_t joy = JOYSTICK_GetControllerButtons();
+    JOYSTICK_ClearAllButtons();
+
+    // the first frame of the typing: the Cross that started it isn't a key
+    static uint32_t lastCallTicks;
+    uint32_t const callTicks = timerGetTicks();
+
+    if (callTicks - lastCallTicks > 100)
+    {
+        joy = 0;
+        I_ClearAllInput();
+    }
+
+    lastCallTicks = callTicks;
+    int32_t const held = PS3_PadHeldBits();
+
+    // a direction held: again after 400 ms, then every 70 ms
+    static int repeatDir = -1;
+    static uint32_t repeatTime;
+    static int const dirs[4] = { CONTROLLER_BUTTON_DPAD_UP, CONTROLLER_BUTTON_DPAD_DOWN,
+                                 CONTROLLER_BUTTON_DPAD_LEFT, CONTROLLER_BUTTON_DPAD_RIGHT };
+    uint32_t const now = timerGetTicks();
+    int dir = -1;
+
+    for (int d : dirs)
+        if (joy & (1 << d))
+        {
+            dir = repeatDir = d;
+            repeatTime = now + 400;
+            break;
+        }
+
+    if (dir < 0 && repeatDir >= 0)
+    {
+        if (!(held & (1 << repeatDir)))
+            repeatDir = -1;
+        else if ((int32_t)(now - repeatTime) >= 0)
+        {
+            dir = repeatDir;
+            repeatTime = now + 70;
+        }
+    }
+
+    switch (dir)
+    {
+        case CONTROLLER_BUTTON_DPAD_UP:    PS3_OskMove(0, -1); S_PlaySound(RR ? 335 : KICK_HIT); break;
+        case CONTROLLER_BUTTON_DPAD_DOWN:  PS3_OskMove(0, 1);  S_PlaySound(RR ? 335 : KICK_HIT); break;
+        case CONTROLLER_BUTTON_DPAD_LEFT:  PS3_OskMove(-1, 0); S_PlaySound(RR ? 335 : KICK_HIT); break;
+        case CONTROLLER_BUTTON_DPAD_RIGHT: PS3_OskMove(1, 0);  S_PlaySound(RR ? 335 : KICK_HIT); break;
+    }
+
+    int32_t result = 0;
+
+    if (joy & (1 << CONTROLLER_BUTTON_A))
+    {
+        if (ps3OskRow != PS3_OSK_SPECIAL)
+            PS3_OskType(t, maxlength, flags, PS3_OskChar(ps3OskRow, ps3OskCol));
+        else switch (ps3OskCol)
+        {
+            case 0: ps3OskLower = !ps3OskLower; break;
+            case 1: PS3_OskType(t, maxlength, flags, ' '); break;
+            case 2: PS3_OskErase(t); break;
+            case 3: result = 1; break;
+        }
+    }
+    else if (joy & (1 << CONTROLLER_BUTTON_X))
+        PS3_OskErase(t);
+    else if (joy & (1 << CONTROLLER_BUTTON_Y))
+        PS3_OskType(t, maxlength, flags, ' ');
+    else if (joy & (1 << CONTROLLER_BUTTON_START))
+        result = 1;
+    else if (joy & ((1 << CONTROLLER_BUTTON_B) | (1 << CONTROLLER_BUTTON_BACK)))
+        result = -1;
+
+    if (result)
+    {
+        // the menu doesn't see this frame's presses
+        I_ClearAllInput();
+        repeatDir = -1;
+    }
+
+    return result;
+}
+
+static void PS3_OskText(int32_t x, int32_t y, char const *t, int selected)
+{
+    int32_t const shade = selected ? (int32_t)(sintable[((int32_t)totalclock << 5) & 2047] >> 11) : 12;
+
+    G_ScreenText(MF_Bluefont.tilenum, (x << 16), (y << 16), MF_Bluefont.zoom, 0, 0, t, shade, selected ? 2 : MF_Bluefont.pal,
+                 2|8|16|ROTATESPRITE_FULL16, 0, MF_Bluefont.emptychar.x, MF_Bluefont.emptychar.y, MF_Bluefont.between.x,
+                 MF_Bluefont.between.y, MF_Bluefont.textflags | TEXT_XCENTER, 0, 0, xdim-1, ydim-1);
+}
+
+// over the menu, on the frames something is being typed
+static void PS3_OskDraw(void)
+{
+    if (!ps3OskText)
+        return;
+
+    int32_t const y1 = 112;
+
+    // the panel: the menu's picture, dark, over the lower part
+    if (tilesiz[MENUSCREEN].x > 0 && tilesiz[MENUSCREEN].y > 0)
+    {
+        int32_t const zoom = max(divscale16(320, tilesiz[MENUSCREEN].x), divscale16(200, tilesiz[MENUSCREEN].y));
+        rotatesprite_ybounds(160<<16, 100<<16, zoom, 0, MENUSCREEN, 24, 0, 2|8|64, scale(y1, ydim, 200), ydim-1);
+    }
+
+    char buffer[TYPEBUFSIZE + 4];
+    Bsnprintf(buffer, sizeof(buffer), "%s%s", ps3OskText, ((int32_t)totalclock & 32) ? "_" : " ");
+    PS3_OskText(160, y1 + 6, buffer, 0);
+
+    for (int row = 0; row < 3; row++)
+        for (int col = 0; col < PS3_OSK_COLS; col++)
+        {
+            char str[2] = { PS3_OskChar(row, col), 0 };
+            PS3_OskText(160 + (col - 6) * 20, y1 + 20 + row * 13, str, row == ps3OskRow && col == ps3OskCol);
+        }
+
+    for (int k = 0; k < 4; k++)
+    {
+        char const *text = k == 0 ? (ps3OskLower ? "ABC" : "abc") : ps3OskSpecial[k];
+        PS3_OskText(160 + (2 * k - 3) * 36, y1 + 61, text, ps3OskRow == PS3_OSK_SPECIAL && ps3OskCol == k);
+    }
+
+    mminitext(160 - 130, y1 + 76, "CROSS TYPE  SQUARE ERASE  TRIANGLE SPACE  START DONE  CIRCLE CANCEL", 0);
+
+    ps3OskText = NULL;
+}
+#endif
+
 static void Menu_RunInput(Menu_t *cm)
 {
     switch (cm->type)
@@ -7788,7 +7998,11 @@ static void Menu_RunInput(Menu_t *cm)
         case TextForm:
         {
             auto *object = (MenuTextForm_t*)cm->object;
+#ifdef __PPU__
+            int32_t hitstate = PS3_OskEnterText(object->input, object->bufsize-1, 0);
+#else
             int32_t hitstate = I_EnterText(object->input, object->bufsize-1, 0);
+#endif
 
             if (hitstate == -1 || Menu_RunInput_MouseReturn())
             {
@@ -8421,7 +8635,11 @@ static void Menu_RunInput(Menu_t *cm)
                 {
                     auto *object = (MenuString_t*)currentry->entry;
 
+#ifdef __PPU__
+                    int32_t hitstate = PS3_OskEnterText(object->editfield, object->bufsize-1, object->flags);
+#else
                     int32_t hitstate = I_EnterText(object->editfield, object->bufsize-1, object->flags);
+#endif
 
                     if (hitstate == -1 || Menu_RunInput_MouseReturn())
                     {
@@ -8586,6 +8804,10 @@ void M_DisplayMenus(void)
     }
     else
         Menu_Run(m_currentMenu, origin);
+
+#ifdef __PPU__
+    PS3_OskDraw();
+#endif
 
 #if !defined EDUKE32_TOUCH_DEVICES
     if (m_menuchange_watchpoint >= 3)
