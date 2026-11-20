@@ -118,7 +118,9 @@ static rsxFragmentProgram *pm_fp[PS3GL_POLYMOST_VIEWS];
 static u32 pm_fp_offset[PS3GL_POLYMOST_VIEWS][PM_MODES];   /* copies in RSX memory */
 static int pm_fp_ok[PS3GL_POLYMOST_VIEWS][PM_MODES];
 
-/* what L3+R3 cycles through: a fragment program and its mode (-1: pm_mode) */
+/* the debug views (PS3GL_SetPolymostView; on no button since NBlood-PS3
+   patch 31, L3+R3 skips levels in the debug builds): a fragment program
+   and its mode (-1: pm_mode) */
 typedef struct {
 	int fp, mode;
 	const char *name;
@@ -342,7 +344,7 @@ ps3gl_prog_init(void)
 
 			rsxFragmentProgramGetUCode(pm_fp[0], &ucode, &size);
 			PS3_Log("[gl] Polymost programs: vertex constants %s (base %d), fragment program "
-					"%u bytes (%d texcoord reads)%s, %d views (L3+R3)",
+					"%u bytes (%d texcoord reads)%s, %d debug views",
 					contiguous ? "in one block" : "one by one", pm_const_base, (unsigned)size,
 					PatchPerspective((u8 *)ucode, size, 0),
 					pm_fp_ok[0][0] ? "" : " -- NO RSX MEMORY", PM_VIEWS);

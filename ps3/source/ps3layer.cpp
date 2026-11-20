@@ -122,10 +122,8 @@ extern "C" {
 int   PS3GL_Init(int width, int height);
 void  PS3GL_BeginFrame(void);
 void  PS3GL_EndFrame(void);
-void  PS3GL_SetPolymostView(int view);
 void  PS3GL_SetFastShaders(int on);
 int   PS3GL_FastShaders(void);
-int   PS3GL_PolymostView(void);
 void *PS3GL_GetProcAddress(const char *name);
 }
 
@@ -864,20 +862,12 @@ static void PollPad(void)
     int32_t const pressed  = bits & ~pad_lastbits;
     int32_t const released = pad_lastbits & ~bits;
 
-    // the testing combos below only with USRDIR/logs.txt: L3+R3 and
-    // SELECT+L3/R3 are presses a player makes (run + crouch...)
+    // the testing combos below only with USRDIR/logs.txt: SELECT+L3/R3
+    // are presses a player makes (run + crouch...). L3+R3 is the debug
+    // builds' level skipper: the shader's debug views (ps3gl_prog.c) are
+    // no longer on a button.
     if (PS3_LogsEnabled())
     {
-#ifdef USE_OPENGL
-    // L3+R3: the next debug view of Polymost's shader (ps3gl_prog.c)
-    {
-        int32_t const combo = (1 << PADBTN_LEFTSTICK) | (1 << PADBTN_RIGHTSTICK);
-
-        if ((bits & combo) == combo && (pressed & combo))
-            PS3GL_SetPolymostView(PS3GL_PolymostView() + 1);
-    }
-#endif
-
 #ifdef USE_OPENGL
     // SELECT+L3: Polymost's short fragment programs off / on (to compare)
     {

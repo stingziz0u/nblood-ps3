@@ -81,8 +81,11 @@ static int          sf2_active;     /* hooked and playing (the lock) */
 extern "C" {
 int           PS3_SF2SPU_Available(void);
 sf2spu_job *  PS3_SF2SPU_Job(void);
-sf2spu_voice *PS3_SF2SPU_Voices(void);
 float const * PS3_SF2SPU_Out(void);
+int           PS3_SF2SPU_Count(void);
+void          PS3_SF2SPU_Begin(void);
+sf2spu_voice *PS3_SF2SPU_Add(int index);
+int           PS3_SF2SPU_Results(int spu, sf2spu_voice **voices);
 int           PS3_SF2SPU_Run(void);
 void          PS3_SF2SPU_TakeStats(unsigned *jobs, unsigned *voices, unsigned *misses, unsigned *waits, unsigned *spu_us, unsigned *spu_max_us);
 }
@@ -107,23 +110,29 @@ static void SF2_RenderSPU(tsf *f, float *buffer, int samples)
         return;
     }
 
+    // the voices split between the SPUs (ps3_sf2spu.c: each stays on
+    // its SPU while it plays)
     sf2spu_job *const   job = PS3_SF2SPU_Job();
-    sf2spu_voice *const w   = PS3_SF2SPU_Voices();
     struct tsf_voice *  v = f->voices, *vEnd = v + f->voiceNum, *rest = vEnd;
     int                 n = 0;
+
+    PS3_SF2SPU_Begin();
 
     for (; v != vEnd; v++)
     {
         if (v->playingPreset == -1)
             continue;
 
-        if (n == SF2SPU_MAX_VOICES)
+        sf2spu_voice *const o = PS3_SF2SPU_Add((int)(v - f->voices));
+
+        if (!o)
         {
             rest = v;   /* the ones that don't fit: on the PPU, after */
             break;
         }
 
-        sf2spu_voice *const o = &w[n++];
+        n++;
+
         struct tsf_region const *const r = v->region;
 
         o->pitchInputTimecents  = v->pitchInputTimecents;
@@ -176,23 +185,29 @@ static void SF2_RenderSPU(tsf *f, float *buffer, int samples)
         return;
     }
 
-    for (int i = 0; i < n; i++)
+    for (int k = 0, spus = PS3_SF2SPU_Count(); k < spus; k++)
     {
-        sf2spu_voice const *const o = &w[i];
-        struct tsf_voice *const   d = &f->voices[o->index];
+        sf2spu_voice *w = nullptr;
+        int const     m = PS3_SF2SPU_Results(k, &w);
 
-        if (o->ended)
+        for (int i = 0; i < m; i++)
         {
-            tsf_voice_kill(d);
-            continue;
-        }
+            sf2spu_voice const *const o = &w[i];
+            struct tsf_voice *const   d = &f->voices[o->index];
 
-        d->sourceSamplePosition = o->sourceSamplePosition;
-        memcpy(&d->ampenv, &o->ampenv, sizeof(d->ampenv));
-        memcpy(&d->modenv, &o->modenv, sizeof(d->modenv));
-        memcpy(&d->lowpass, &o->lowpass, sizeof(d->lowpass));
-        memcpy(&d->modlfo, &o->modlfo, sizeof(d->modlfo));
-        memcpy(&d->viblfo, &o->viblfo, sizeof(d->viblfo));
+            if (o->ended)
+            {
+                tsf_voice_kill(d);
+                continue;
+            }
+
+            d->sourceSamplePosition = o->sourceSamplePosition;
+            memcpy(&d->ampenv, &o->ampenv, sizeof(d->ampenv));
+            memcpy(&d->modenv, &o->modenv, sizeof(d->modenv));
+            memcpy(&d->lowpass, &o->lowpass, sizeof(d->lowpass));
+            memcpy(&d->modlfo, &o->modlfo, sizeof(d->modlfo));
+            memcpy(&d->viblfo, &o->viblfo, sizeof(d->viblfo));
+        }
     }
 
     memcpy(buffer, PS3_SF2SPU_Out(), floats * sizeof(float));
@@ -245,10 +260,10 @@ static void SF2_Stats(unsigned us)
 #ifdef PS3_SF2_SPU
     unsigned jobs, voices, misses, waits, spu_us, spu_max;
     PS3_SF2SPU_TakeStats(&jobs, &voices, &misses, &waits, &spu_us, &spu_max);
-    snprintf(sf2_stat_msg, sizeof(sf2_stat_msg), "[sf2] %u buffers, %u us avg, %u us max (%.1f%% of real time); SPU: %u jobs, %.1f voices, %u lines (%u waited), %u us avg, %u us max; "
+    snprintf(sf2_stat_msg, sizeof(sf2_stat_msg), "[sf2] %u buffers, %u us avg, %u us max (%.1f%% of real time); SPU x%d: %u jobs, %.1f voices, %u lines (%u waited), %u us avg, %u us max; "
             "MIDI %d bpm x %d ppq = %d ticks/s (%u tempo changes), %d voices allocated",
             sf2_stat_calls, sf2_stat_us / sf2_stat_calls, sf2_stat_max,
-            sf2_stat_us * 100.0 / (double)(now - sf2_stat_last), jobs, jobs ? voices / (double)jobs : 0.0, misses, waits,
+            sf2_stat_us * 100.0 / (double)(now - sf2_stat_last), PS3_SF2SPU_Count(), jobs, jobs ? voices / (double)jobs : 0.0, misses, waits,
             jobs ? spu_us / jobs : 0, spu_max, sf2_tempo_bpm, sf2_tempo_division, MV_MIDIRenderTempo, sf2_tempo_changes,
             sf2_synth ? sf2_synth->voiceNum : 0);
     sf2_tempo_changes = 0;

@@ -502,10 +502,10 @@ static void wait_tag(int tag)
 
 /* sys_spu_thread_send_event (libsputhread), here so the SPU side needs
    nothing but spu-gcc */
-static void send_event(uint32_t data0, uint32_t data1)
+static void send_event(uint32_t port, uint32_t data0, uint32_t data1)
 {
 	spu_writech(SPU_WrOutMbox, data1);
-	spu_writech(SPU_WrOutIntrMbox, ((uint32_t)SF2SPU_PORT << 24) | (data0 & 0x00FFFFFFu));
+	spu_writech(SPU_WrOutIntrMbox, (port << 24) | (data0 & 0x00FFFFFFu));
 	(void)spu_readch(SPU_RdInMbox);
 }
 
@@ -513,7 +513,11 @@ int main(uint64_t job_ea, uint64_t arg2, uint64_t arg3, uint64_t arg4)
 {
 	uint32_t seq = 0;
 
-	(void)arg2, (void)arg3, (void)arg4;
+	/* the event port this SPU answers on (NBlood-PS3: one per SPU, the
+	   PPU tells them apart by it) */
+	uint32_t const port = arg2 ? (uint32_t)(arg2 & 0x3F) : SF2SPU_PORT;
+
+	(void)arg3, (void)arg4;
 
 	cache_flush();
 	spu_writech(SPU_WrDec, 0xFFFFFFFFu);
@@ -579,7 +583,7 @@ int main(uint64_t job_ea, uint64_t arg2, uint64_t arg3, uint64_t arg4)
 		mfc_put(&job.done, job_ea + __builtin_offsetof(sf2spu_job, done), 16, TAG_IO, 0, 0);
 		wait_tag(TAG_IO);
 
-		send_event(seq, misses);
+		send_event(port, seq, misses);
 	}
 
 	spu_writech(SPU_WrOutMbox, 0);
