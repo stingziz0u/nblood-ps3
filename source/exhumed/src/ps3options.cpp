@@ -106,28 +106,200 @@ static void TextCentered(int y, const char *s, int shade)
 }
 
 // ------------------------------------------------------------------------
-// OPTIONS on the main menu: a tile of the size of VOLUME's, with the
-// word in the font made as tall as it fits (made again if the cache
-// lets it go)
+// OPTIONS on the main menu, as the other items: their board (the wooden
+// one behind MUSIC's slider, kMenuBlankTitleTile) and their letters, cut
+// from the other items' tiles: O from LOAD GAME, P from PLAYER, T, I and
+// N from TRAINING, S from MUSIC. Each item is a 157x20 tile, its letters
+// blue with a gold edge on dark wood; a letter is a run of columns with
+// such pixels in it, and the wood inside its edge (an O's middle) goes
+// with it. If the art isn't what this expects, the word in the game's
+// font instead. Made again if the cache lets it go.
 
-enum { kTilePS3Options = MAXUSERTILES - 16 };
+enum
+{
+    kTilePS3Options = MAXUSERTILES - 16,
+    kMenuItemW = 157, kMenuItemH = 20,      // the items' tiles
+    kBoardTop = 3, kBoardBottom = 16,        // the wood inside the frame (rows)
+    kBoardLeft = 5, kBoardRight = 151,       // (columns)
+    kMaxRuns = 16,
+};
 
-int PS3_OptionsTile(void)
+static bool IsLetterPixel(uint8_t v)
+{
+    if (v == 255)
+        return false;
+
+    int const r = palette[v * 3], g = palette[v * 3 + 1], b = palette[v * 3 + 2];
+    return b > r + 20 || r + g > 180;
+}
+
+// the runs of columns with letter pixels on an item's board
+static int LetterRuns(uint8_t const *p, int run[kMaxRuns][2])
+{
+    int n = 0;
+
+    for (int x = kBoardLeft + 1; x < kBoardRight && n < kMaxRuns; )
+    {
+        bool col = false;
+
+        for (int y = kBoardTop + 1; y < kBoardBottom && !col; y++)
+            col = IsLetterPixel(p[x * kMenuItemH + y]);
+
+        if (!col)
+        {
+            x++;
+            continue;
+        }
+
+        run[n][0] = x;
+
+        while (x < kBoardRight)
+        {
+            bool c = false;
+
+            for (int y = kBoardTop + 1; y < kBoardBottom && !c; y++)
+                c = IsLetterPixel(p[x * kMenuItemH + y]);
+
+            if (!c)
+                break;
+
+            x++;
+        }
+
+        run[n++][1] = x;
+    }
+
+    return n;
+}
+
+// a letter (the columns s..e-1 of an item) onto the tile at x0: its
+// pixels, and those its edge closes in; the wood the edge doesn't close
+// in (reached from the run's borders) stays the board's
+static void CopyLetter(uint8_t const *src, int s, int e, uint8_t *dst, int x0)
+{
+    enum { kMaxW = 40, kRows = kBoardBottom - kBoardTop + 1 };
+    uint8_t outside[kMaxW][kRows];
+    int16_t queue[kMaxW * kRows][2];
+    int qn = 0;
+    int const w = min(e - s, (int)kMaxW);
+
+    Bmemset(outside, 0, sizeof(outside));
+
+    for (int x = 0; x < w; x++)
+        for (int y = 0; y < kRows; y++)
+            if ((x == 0 || x == w - 1 || y == 0 || y == kRows - 1)
+                && !IsLetterPixel(src[(s + x) * kMenuItemH + kBoardTop + y]))
+            {
+                outside[x][y] = 1;
+                queue[qn][0] = x;
+                queue[qn][1] = y;
+                qn++;
+            }
+
+    for (int q = 0; q < qn; q++)
+    {
+        static const int d[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+
+        for (auto const &dd : d)
+        {
+            int const x = queue[q][0] + dd[0], y = queue[q][1] + dd[1];
+
+            if (x < 0 || x >= w || y < 0 || y >= kRows || outside[x][y]
+                || IsLetterPixel(src[(s + x) * kMenuItemH + kBoardTop + y]))
+                continue;
+
+            outside[x][y] = 1;
+            queue[qn][0] = x;
+            queue[qn][1] = y;
+            qn++;
+        }
+    }
+
+    for (int x = 0; x < w; x++)
+    {
+        int const dx = x0 + x;
+
+        if (dx < kBoardLeft || dx > kBoardRight)
+            continue;
+
+        for (int y = 0; y < kRows; y++)
+            if (!outside[x][y])
+                dst[dx * kMenuItemH + kBoardTop + y] = src[(s + x) * kMenuItemH + kBoardTop + y];
+    }
+}
+
+static bool OptionsFromMenuArt(uint8_t *dst)
+{
+    int const nVolume = kMenuNewGameTile + 3, nBoard = kMenuBlankTitleTile;
+    // the items with the letters (tile, the letters in it, the one taken)
+    static const struct { int tile, letters, which; } from[] =
+    {
+        { kMenuLoadGameTile,    8, 1 },   // lOad game
+        { kMenuNewGameTile + 7, 0, 0 },   // Player (A and Y run together)
+        { kMenuNewGameTile + 2, 8, 0 },   // Training
+        { kMenuNewGameTile + 2, 8, 3 },   // traIning
+        { kMenuLoadGameTile,    8, 1 },   // lOad game
+        { kMenuNewGameTile + 2, 8, 4 },   // traiNing
+        { kMenuMusicTile,       5, 2 },   // muSic
+    };
+    int runs[ARRAY_SIZE(from)][2];
+    int total = -1;
+
+    if (tilesiz[nBoard].x < kBoardRight + 1 || tilesiz[nBoard].y < kBoardBottom + 1)
+        return false;
+
+    for (int t : { nVolume, nBoard, (int)kMenuLoadGameTile, kMenuNewGameTile + 7, kMenuNewGameTile + 2, (int)kMenuMusicTile })
+    {
+        if (t != nBoard && (tilesiz[t].x != kMenuItemW || tilesiz[t].y != kMenuItemH))
+            return false;
+
+        if (!waloff[t])
+            tileLoad(t);
+
+        if (!waloff[t])
+            return false;
+    }
+
+    for (int i = 0; i < ARRAY_SSIZE(from); i++)
+    {
+        int run[kMaxRuns][2];
+        int const n = LetterRuns((uint8_t const *)waloff[from[i].tile], run);
+
+        if ((from[i].letters && n != from[i].letters) || n <= from[i].which)
+            return false;
+
+        runs[i][0] = run[from[i].which][0];
+        runs[i][1] = run[from[i].which][1];
+        total += runs[i][1] - runs[i][0] + 1;
+    }
+
+    // VOLUME's frame, the board's wood inside it
+    uint8_t const *const pBoard = (uint8_t const *)waloff[nBoard];
+    int const boardH = tilesiz[nBoard].y;
+
+    Bmemcpy(dst, (void *)waloff[nVolume], kMenuItemW * kMenuItemH);
+
+    for (int x = kBoardLeft; x <= kBoardRight; x++)
+        for (int y = kBoardTop; y <= kBoardBottom; y++)
+            dst[x * kMenuItemH + y] = pBoard[x * boardH + y];
+
+    // the letters, one column apart, in the middle
+    int x0 = (kMenuItemW - total) / 2;
+
+    for (int i = 0; i < ARRAY_SSIZE(from); i++)
+    {
+        CopyLetter((uint8_t const *)waloff[from[i].tile], runs[i][0], runs[i][1], dst, x0);
+        x0 += runs[i][1] - runs[i][0] + 1;
+    }
+
+    return true;
+}
+
+// the fallback: the word in the game's font, as tall as it fits
+static void OptionsFromFont(uint8_t *pDst, int w, int h)
 {
     static const char word[] = "OPTIONS";
-    int const nVolume = kMenuNewGameTile + 3;   // VOLUME (menu.cpp, kMenuVolume)
-    int const nTile = kTilePS3Options;
 
-    if (waloff[nTile])
-        return nTile;
-
-    int const w = tilesiz[nVolume].x > 0 ? tilesiz[nVolume].x : 140;
-    int const h = tilesiz[nVolume].y > 0 ? tilesiz[nVolume].y : 20;
-
-    if (!tileCreate(nTile, w, h))
-        return nVolume;
-
-    uint8_t *const pDst = (uint8_t *)waloff[nTile];
     Bmemset(pDst, 255, w * h);
 
     int const tw = TextWidth(word) - 1;
@@ -184,6 +356,34 @@ int PS3_OptionsTile(void)
         }
 
         x0 += mulscale16(sw + 1, scale);
+    }
+}
+
+int PS3_OptionsTile(void)
+{
+    int const nVolume = kMenuNewGameTile + 3;   // VOLUME (menu.cpp, kMenuVolume)
+    int const nTile = kTilePS3Options;
+
+    if (waloff[nTile])
+        return nTile;
+
+    int const w = tilesiz[nVolume].x > 0 ? tilesiz[nVolume].x : kMenuItemW;
+    int const h = tilesiz[nVolume].y > 0 ? tilesiz[nVolume].y : kMenuItemH;
+
+    if (!tileCreate(nTile, w, h))
+        return nVolume;
+
+    uint8_t *const pDst = (uint8_t *)waloff[nTile];
+
+    if (w != kMenuItemW || h != kMenuItemH || !OptionsFromMenuArt(pDst))
+    {
+        static bool logged;
+
+        if (!logged)
+            LOG_F(WARNING, "PS3: the menu's art isn't PowerSlave's: OPTIONS in the font");
+
+        logged = true;
+        OptionsFromFont(pDst, w, h);
     }
 
     tileInvalidate(nTile, -1, -1);
@@ -594,8 +794,15 @@ static int KeyRepeat(int sc)
     return 0;
 }
 
+// (a link or an action has no value, nor a get: patch 37 called it anyway
+// -- a jump through a null function descriptor, the thread dead)
 static void ValueText(OptItem const &it, char *buf, int size)
 {
+    buf[0] = '\0';
+
+    if (!it.get || (it.type != kItemBool && it.type != kItemCycle && it.type != kItemRange))
+        return;
+
     int const v = it.get(it.arg);
 
     switch (it.type)
@@ -621,7 +828,14 @@ static void Draw(OptMenu const &m, int nSel, int nTop, int nRows, int nLineH, in
 
     int const shadeSel = Sin((int)totalclock << 4) >> 9;
 
-    TextCentered(y0 - nLineH - 4, m.title, 0);
+    // the title: OPTIONS' board as on the main menu, the pages' in the font
+    if (&m == &menuOptions)
+    {
+        int const nTile = PS3_OptionsTile();
+        overwritesprite(160 - tilesiz[nTile].x / 2, y0 - tilesiz[nTile].y - 6, nTile, 0, 2, kPalNormal);
+    }
+    else
+        TextCentered(y0 - nLineH - 4, m.title, 0);
 
     for (int i = nTop; i < m.count && i < nTop + nRows; i++)
     {
