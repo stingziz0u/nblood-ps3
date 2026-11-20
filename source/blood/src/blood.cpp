@@ -2000,7 +2000,13 @@ RESTART:
                                 break;
                             faketimerhandler();
                             PS3_CRUMB("ProcessFrame", gFrame);
+#ifdef __PPU__
+                            PS3_ProfBegin(PS3P_GAME);
+#endif
                             ProcessFrame();
+#ifdef __PPU__
+                            PS3_ProfEnd(PS3P_GAME);
+#endif
                         }
                     } while (totalclock >= gNetFifoClock && ready2send);
                     gameUpdate = true;

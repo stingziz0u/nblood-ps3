@@ -46,6 +46,7 @@
 #include "ps3gl.h"
 #include "../ps3_platform.h"
 #include "../ps3_video.h"
+#include "ps3_prof.h"
 
 /* identity remap (IoQuake3-PS3 / Doom64-PS3) */
 #define TEX_REMAP_IDENTITY 0x00AAE4
@@ -681,8 +682,8 @@ Upload(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
 	ps3gl.tex_written = 1;
 }
 
-void APIENTRY
-glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
+static void
+TexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 		GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid *pixels)
 {
 	ps3gl_texture_t *t = Bound();
@@ -812,8 +813,8 @@ glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 	BuildDescriptor(t);
 }
 
-void APIENTRY
-glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+static void
+TexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
 		GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels)
 {
 	ps3gl_texture_t *t = Bound();
@@ -846,6 +847,33 @@ glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
 	}
 
 	Upload(t, level, xoffset, yoffset, width, height, format, (const uint8_t *)pixels);
+}
+
+/* NBlood-PS3: the uploads' time for the slow frames' log (ps3_prof.c) */
+void APIENTRY
+glTexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
+		GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid *pixels)
+{
+	PS3_ProfBegin(PS3P_UPLOAD);
+	TexImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
+	if (pixels && width > 0 && height > 0)
+	{
+		PS3_ProfBytes(PS3P_UPLOAD, (unsigned)width * (unsigned)height * (unsigned)FormatBytes(format));
+	}
+	PS3_ProfEnd(PS3P_UPLOAD);
+}
+
+void APIENTRY
+glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+		GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels)
+{
+	PS3_ProfBegin(PS3P_UPLOAD);
+	TexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
+	if (pixels && width > 0 && height > 0)
+	{
+		PS3_ProfBytes(PS3P_UPLOAD, (unsigned)width * (unsigned)height * (unsigned)FormatBytes(format));
+	}
+	PS3_ProfEnd(PS3P_UPLOAD);
 }
 
 static void

@@ -54,6 +54,7 @@ void *ps3gl_rsx_memalign(uint32_t align, uint32_t size);   /* gl/ps3gl_main.c */
 
 #include "ps3_platform.h"
 #include "ps3_video.h"
+#include "ps3_prof.h"
 #include "gl/ps3gl.h"
 #include "gl/ps3gl_shader_data.h"
 #include <ppu-lv2.h>
@@ -256,6 +257,8 @@ WaitFlips(void)
 {
 	int waited = 0;
 
+	PS3_ProfBegin(PS3P_FLIP);
+
 	while ((int)(flip_queued - flip_completed) > FB_COUNT - 2)
 	{
 		usleep(100);
@@ -267,6 +270,8 @@ WaitFlips(void)
 			break;
 		}
 	}
+
+	PS3_ProfEnd(PS3P_FLIP);
 }
 
 /* Waits until the RSX has done everything queued so far. rsxFinish(ctx, v)
@@ -294,6 +299,8 @@ PS3_Video_Finish(void)
 		ref = 0x1000;
 	}
 
+	PS3_ProfBegin(PS3P_RSXSYNC);
+
 	/* rsxFinish(ctx, ref), with a time limit: on the way out after an
 	   error the RSX may be the thing that's stuck. */
 	rsxSetReferenceCommand(ctx, ref);
@@ -310,6 +317,8 @@ PS3_Video_Finish(void)
 			break;
 		}
 	}
+
+	PS3_ProfEnd(PS3P_RSXSYNC);
 }
 
 int

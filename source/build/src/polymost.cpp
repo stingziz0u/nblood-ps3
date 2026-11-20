@@ -2133,6 +2133,9 @@ static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, in
 
 void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t dashade, int32_t dameth, pthtyp *pth, int32_t doalloc)
 {
+#ifdef __PPU__
+    PS3_PROF_SCOPE(PS3P_TEX);
+#endif
     if (dameth & DAMETH_INDEXED)
     {
         return gloadtile_art_indexed(dapic, dameth, pth, doalloc);

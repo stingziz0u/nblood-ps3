@@ -1034,6 +1034,10 @@ void kclose_internal(int32_t handle, const uint8_t *arraygrp, intptr_t *arrayhan
 
 int32_t kread(int32_t handle, void *buffer, int32_t leng)
 {
+#ifdef __PPU__
+    PS3_PROF_SCOPE(PS3P_DISK);
+    PS3_ProfBytes(PS3P_DISK, leng > 0 ? (unsigned)leng : 0);
+#endif
     return kread_internal(handle, buffer, leng, filegrp, filehan, filepos);
 }
 int32_t klseek(int32_t handle, int32_t offset, int32_t whence)

@@ -44,6 +44,7 @@
 
 #include "driver_ps3.h"
 #include "ps3_platform.h"
+#include "ps3_prof.h"
 
 /* the synth renders its next buffer of music before the mix, outside
    the lock (driver_sf2.cpp) */
@@ -443,10 +444,20 @@ void PS3Drv_PCM_StopPlayback(void)
     PS3Drv_PCM_Unlock();
 }
 
+// MV_Lock: when the audio thread has the lock (mixing a division), how
+// long the game thread waits for it goes to the slow frames' log
+// (ps3_prof.c). The audio thread is never counted there.
 void PS3Drv_PCM_Lock(void)
 {
-    if (lock_ok)
-        sysMutexLock(lock, 0);
+    if (!lock_ok)
+        return;
+
+    if (sysMutexTryLock(lock) == 0)
+        return;
+
+    PS3_ProfBegin(PS3P_ALOCK);
+    sysMutexLock(lock, 0);
+    PS3_ProfEnd(PS3P_ALOCK);
 }
 
 void PS3Drv_PCM_Unlock(void)

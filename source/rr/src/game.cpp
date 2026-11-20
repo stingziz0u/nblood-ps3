@@ -8928,7 +8928,13 @@ MAIN_LOOP_RESTART:
                     if (((ud.show_help == 0 && (g_player[myconnectindex].ps->gm&MODE_MENU) != MODE_MENU) || ud.recstat == 2 || (g_netServer || ud.multimode > 1)) &&
                             (g_player[myconnectindex].ps->gm&MODE_GAME))
                     {
+#ifdef __PPU__
+                        PS3_ProfBegin(PS3P_GAME);
+#endif
                         G_MoveLoop();
+#ifdef __PPU__
+                        PS3_ProfEnd(PS3P_GAME);
+#endif
                         S_Update();
 #ifdef __ANDROID__
                         inputfifo[0][myconnectindex].fvel = 0;

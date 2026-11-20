@@ -654,6 +654,9 @@ bool (*rt_tileload_callback)(int16_t tileNum) = nullptr;
 
 bool tileLoad(int16_t tileNum)
 {
+#ifdef __PPU__
+    PS3_PROF_SCOPE(PS3P_TILE);
+#endif
     if ((unsigned) tileNum >= (unsigned) MAXTILES) return 0;
     int const dasiz = tilesiz[tileNum].x*tilesiz[tileNum].y;
     if (dasiz <= 0) return 0;

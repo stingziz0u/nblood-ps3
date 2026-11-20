@@ -65,6 +65,9 @@ struct in6_addr
 }
 #endif
 
+/* NBlood-PS3: the frame's sections (ps3/source/ps3_prof.c) */
+#include "ps3_prof.h"
+
 /* C11's static_assert: newlib 1.20's <assert.h> predates it */
 #if !defined __cplusplus && !defined static_assert
 #define static_assert _Static_assert

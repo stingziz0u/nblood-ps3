@@ -117,6 +117,13 @@ OnGameThread(void)
 	return sp > stack_lo && sp < stack_hi;
 }
 
+/* ps3_prof.c: only the game thread's time counts */
+int NO_TRACE
+PS3_Debug_OnGameThread(void)
+{
+	return OnGameThread();
+}
+
 void NO_TRACE __cyg_profile_func_enter(void *fn, void *site);
 void NO_TRACE __cyg_profile_func_exit(void *fn, void *site);
 

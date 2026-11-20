@@ -265,7 +265,7 @@ ENGINE_OBJS := \
 # The PS3 layer: talks to the engine (its headers) but calls the real C
 # library (not renamed).
 LAYER_CPP := ps3layer driver_ps3 ps3_gladfill
-LAYER_C   := ps3_log ps3_stdio ps3_pad ps3_video ps3_debug ps3_sf2spu ps3_launcher
+LAYER_C   := ps3_log ps3_stdio ps3_pad ps3_video ps3_debug ps3_prof ps3_sf2spu ps3_launcher
 
 # ps3gl: OpenGL on the RSX, TyrQuakeCell's (ps3/source/gl), plus what
 # Polymost needs (ps3gl_prog.c: its GLSL program as Cg, buffer objects;

@@ -1420,11 +1420,16 @@ void videoShowFrame(int32_t w)
 
         // the frame to the TV (scaled like the classic image), and the
         // next one starts in the next render target
+        PS3_ProfBegin(PS3P_PRESENT);
         GLCloseFrame();
         PS3_Video_Present();
         GLOpenFrame();
+        PS3_ProfEnd(PS3P_PRESENT);
 
         PS3_Pump();
+
+        // where this frame's time went, for the log (ps3_prof.c)
+        PS3_ProfFrame();
         return;
     }
 #endif

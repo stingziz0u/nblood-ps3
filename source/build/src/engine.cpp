@@ -9466,6 +9466,9 @@ int32_t renderDrawRoomsQ16(int32_t daposx, int32_t daposy, int32_t daposz,
                            fix16_t daang, fix16_t dahoriz, int16_t dacursectnum)
 {
     MICROPROFILE_SCOPEI("Engine", EDUKE32_FUNCTION, MP_AUTO);
+#ifdef __PPU__
+    PS3_PROF_SCOPE(PS3P_ROOMS);
+#endif
 
     int32_t i, j, /*cz, fz,*/ closest;
     int16_t *shortptr1, *shortptr2;
@@ -10201,6 +10204,9 @@ static int32_t GetCornerPoints(tspriteptr_t tspr, int32_t (&xx)[4], int32_t (&yy
 void renderDrawMasks(void)
 {
     MICROPROFILE_SCOPEI("Engine", EDUKE32_FUNCTION, MP_AUTO);
+#ifdef __PPU__
+    PS3_PROF_SCOPE(PS3P_MASKS);
+#endif
 
     bool const isPolymost = (videoGetRenderMode() == REND_POLYMOST);
 
