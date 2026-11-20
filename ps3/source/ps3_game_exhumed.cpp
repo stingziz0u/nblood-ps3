@@ -8,6 +8,7 @@
 #include "cd.h"
 #include "sound.h"
 #include "status.h"
+#include "timer.h"
 
 // The XMB's "Quit Game" (ps3layer.cpp): the settings saved and the music
 // and sound stopped, as ShutDown does on the way out, without the rest
@@ -24,6 +25,17 @@ extern "C" void PS3_GameQuit(void)
 extern "C" void PS3_GameFilterOff(void)
 {
     StatusMessage(300, "Not enough video memory: texture filter off");
+}
+
+// PCExhumed's menus and screens read only the keyboard (menu.cpp): the
+// pad's buttons are keys there (ps3layer.cpp, PadKeys). Playing is when
+// the game reads its input (GetLocalInput, input.cpp, every tic): not
+// for a fifth of a second, it's a menu or a screen.
+uint32_t ps3_ex_inputtime;
+
+extern "C" int PS3_GamePadKeys(void)
+{
+    return (uint32_t)timerGetTicks() - ps3_ex_inputtime > 200;
 }
 
 // The autotest (USRDIR/autotest.txt) is EDuke32-PS3's: here the flag is

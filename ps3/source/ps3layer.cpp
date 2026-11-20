@@ -29,6 +29,7 @@
 
 #include "a.h"
 #include "build.h"
+#include "scancodes.h"
 #include "cache1d.h"
 #include "compat.h"
 #include "engine_priv.h"
@@ -130,6 +131,13 @@ void *PS3GL_GetProcAddress(const char *name);
 
 void polymost_ps3_dropRGBA(void);   // build/src/polymost.cpp
 extern "C" void PS3_GameFilterOff(void);    // ps3_game_*.cpp
+
+// Games whose menus read only the keyboard (PCExhumed's): there the pad's
+// buttons are keys too. PS3_GamePadKeys (ps3_game_*.cpp, only where
+// needed): 1 in the menus and screens (the D-pad as the arrows, Cross as
+// Enter, Circle as Escape), 0 while playing (the pad is the controller
+// then; Start is Escape always, the game's menu).
+extern "C" int PS3_GamePadKeys(void) __attribute__((weak));
 
 char nogl = 0;
 static int gl_loaded;       // glad has ps3gl's entry points
@@ -778,6 +786,41 @@ static const struct { unsigned ps3; int button; } padmap[] =
     { PS3_PAD_RIGHT,    PADBTN_DPAD_RIGHT },
 };
 
+static void PadKeys(int32_t pressed, int32_t released)
+{
+    static const struct { int button, scan; char ascii; bool always; } keys[] =
+    {
+        { PADBTN_START,      sc_Escape,     asc_Escape, true  },
+        { PADBTN_B,          sc_Escape,     asc_Escape, false },
+        { PADBTN_A,          sc_Return,     asc_Enter,  false },
+        { PADBTN_DPAD_UP,    sc_UpArrow,    0,          false },
+        { PADBTN_DPAD_DOWN,  sc_DownArrow,  0,          false },
+        { PADBTN_DPAD_LEFT,  sc_LeftArrow,  0,          false },
+        { PADBTN_DPAD_RIGHT, sc_RightArrow, 0,          false },
+    };
+    static int32_t down;   // the buttons that pressed a key
+    int const menus = PS3_GamePadKeys();
+
+    for (auto const &k : keys)
+    {
+        int32_t const m = 1 << k.button;
+
+        if ((pressed & m) && (k.always || menus))
+        {
+            keySetState(k.scan, 1);
+            if (k.ascii && !keyBufferFull())
+                keyBufferInsert(k.ascii);
+            down |= m;
+        }
+
+        if ((released & m) && (down & m))
+        {
+            keySetState(k.scan, 0);
+            down &= ~m;
+        }
+    }
+}
+
 static int StickAxis(int v)
 {
     // 0..255, 128 = center (y grows downwards, as SDL's)
@@ -865,6 +908,9 @@ static void PollPad(void)
 
     int32_t const pressed  = bits & ~pad_lastbits;
     int32_t const released = pad_lastbits & ~bits;
+
+    if (PS3_GamePadKeys)
+        PadKeys(pressed, released);
 
     // the testing combos below only with USRDIR/logs.txt: SELECT+L3/R3
     // are presses a player makes (run + crouch...). L3+R3 is the debug
