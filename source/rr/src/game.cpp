@@ -6487,6 +6487,10 @@ static void G_PS3_DebugCheats(void)
             pPlayer->keys[key] = 1;
 
     // L3 + R3: the level done (next one), as its exit switch does
+    // (sector.cpp, lotag 65535: the next level is chosen there, not by
+    // MODE_EOL; without it the same map started again). No time
+    // (player_par 0): the bonus screen says "Cheated!" and no best time
+    // goes into the config the release build shares.
     int32_t const held = PS3_PadHeldBits();
     bool const skip = (held & (1 << CONTROLLER_BUTTON_LEFTSTICK)) && (held & (1 << CONTROLLER_BUTTON_RIGHTSTICK));
 
@@ -6494,6 +6498,24 @@ static void G_PS3_DebugCheats(void)
     {
         pPlayer->player_par = 0;
         pPlayer->gm = MODE_EOL;
+
+        if (!RRRA || !g_RAendLevel)
+        {
+            if (ud.from_bonus)
+            {
+                ud.level_number = ud.from_bonus;
+                ud.m_level_number = ud.level_number;
+                ud.from_bonus = 0;
+            }
+            else
+            {
+                if (RRRA && ud.level_number == 6 && ud.volume_number == 0)
+                    g_RAendEpisode = 1;
+                ud.level_number = (++ud.level_number < MAXLEVELS) ? ud.level_number : 0;
+                ud.m_level_number = ud.level_number;
+            }
+            g_RAendLevel = 1;
+        }
     }
 
     skipHeld = skip;
