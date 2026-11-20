@@ -3428,6 +3428,117 @@ enddisplayweapon:
 int32_t g_myAimMode = 0, g_myAimStat = 0, g_oldAimStat = 0;
 int32_t mouseyaxismode = -1;
 
+// Lock-on (gamefunc_Lock_On, held; the PS3 port's, EDuke32-PS3's Duke's,
+// no default binding): the view turns to the nearest enemy in front of the
+// player that can be seen, and stays on it while the button is held and
+// the enemy lives. Moving and strafing stay free (circling a target).
+
+// the middle of a sprite, height wise
+static int32_t P_LockOnZ(spritetype const *pSprite)
+{
+    if (pSprite->cstat & CSTAT_SPRITE_YCENTER)
+        return pSprite->z;
+
+    return pSprite->z - ((pSprite->yrepeat * tilesiz[pSprite->picnum].y) << 1);
+}
+
+static int P_LockOnTarget(DukePlayer_t const *pPlayer, int const currentTarget)
+{
+    static int const lockStats[] = { STAT_ACTOR, STAT_ZOMBIEACTOR };
+
+    int     bestSprite = -1;
+    int64_t bestScore  = INT64_MAX;
+    int const viewAng  = fix16_to_int(pPlayer->q16ang);
+
+    for (int const stat : lockStats)
+    {
+        for (int spriteNum = headspritestat[stat]; spriteNum >= 0; spriteNum = nextspritestat[spriteNum])
+        {
+            auto const pSprite = &sprite[spriteNum];
+
+            if (spriteNum == pPlayer->i || pSprite->extra <= 0 || (pSprite->cstat & CSTAT_SPRITE_INVISIBLE)
+                || !A_CheckEnemySprite(pSprite))
+                continue;
+
+            int const dx   = pSprite->x - pPlayer->pos.x;
+            int const dy   = pSprite->y - pPlayer->pos.y;
+            int const dist = FindDistance2D(dx, dy);
+
+            if (dist < 128 || dist > 24576)
+                continue;
+
+            // in front: 45 degrees either way (90 for the one already locked)
+            int const angDiff = klabs(((getangle(dx, dy) - viewAng + 1024) & 2047) - 1024);
+
+            if (angDiff > (spriteNum == currentTarget ? 512 : 256))
+                continue;
+
+            if (!cansee(pPlayer->pos.x, pPlayer->pos.y, pPlayer->pos.z, pPlayer->cursectnum,
+                        pSprite->x, pSprite->y, P_LockOnZ(pSprite), pSprite->sectnum))
+                continue;
+
+            int64_t score = (int64_t)angDiff * 64 + dist;
+
+            if (spriteNum == currentTarget)
+                score >>= 2;  // stays on it unless another is much better
+
+            if (score < bestScore)
+            {
+                bestScore  = score;
+                bestSprite = spriteNum;
+            }
+        }
+    }
+
+    return bestSprite;
+}
+
+static void P_LockOn(int const playerNum, input_t &input)
+{
+    static int      lockTarget = -1;
+    static uint64_t lastTicks;
+
+    auto const pPlayer = g_player[playerNum].ps;
+    uint64_t const now = timerGetNanoTicks();
+    double const   dt  = lastTicks ? (double)(now - lastTicks) / (double)timerGetNanoTickRate() : 0.0;
+
+    lastTicks = now;
+
+    if (!BUTTON(gamefunc_Lock_On) || sprite[pPlayer->i].extra <= 0 || pPlayer->newowner != -1
+        || pPlayer->cursectnum < 0 || ud.overhead_on)
+    {
+        lockTarget = -1;
+        return;
+    }
+
+    lockTarget = P_LockOnTarget(pPlayer, lockTarget);
+
+    if (lockTarget < 0)
+        return;
+
+    float const kPi    = 3.14159265358979f;
+    auto const pSprite = &sprite[lockTarget];
+    float const dx     = (float)(pSprite->x - pPlayer->pos.x);
+    float const dy     = (float)(pSprite->y - pPlayer->pos.y);
+    float const dist   = max(1.f, sqrtf(dx * dx + dy * dy));
+
+    // a fraction of the way each frame: there in about a tenth of a second
+    float const follow = (float)min(1.0, dt * 14.0);
+
+    // yaw, in build angle units (2048 a turn)
+    float const wantAng = atan2f(dy, dx) * (1024.f / kPi);
+    float       dAng    = fmodf(wantAng - fix16_to_float(pPlayer->q16ang) + 3072.f, 2048.f) - 1024.f;
+
+    input.q16avel = fix16_from_float(dAng * follow);
+
+    // pitch, in horiz units (horiz 100 + 128 = 45 degrees = 128); z is 16
+    // times finer than x/y, up is negative
+    float const wantPitch = atan2f((float)(pPlayer->pos.z - P_LockOnZ(pSprite)) * (1.f / 16.f), dist) * (512.f / kPi);
+    float const nowPitch  = atan2f(fix16_to_float(pPlayer->q16horiz + pPlayer->q16horizoff) - 100.f, 128.f) * (512.f / kPi);
+
+    input.q16horz = fix16_from_float((wantPitch - nowPitch) * follow);
+}
+
 void P_GetInput(int playerNum)
 {
     auto const pPlayer = g_player[playerNum].ps;
@@ -3606,6 +3717,8 @@ void P_GetInput(int playerNum)
 
     input.fvel = clamp(input.fvel, -MAXVEL, MAXVEL);
     input.svel = clamp(input.svel, -MAXSVEL, MAXSVEL);
+
+    P_LockOn(playerNum, input);   // (PS3 port)
 
     input.q16avel = fix16_clamp(input.q16avel, F16(-MAXANGVEL), F16(MAXANGVEL));
     input.q16horz = fix16_clamp(input.q16horz, F16(-MAXHORIZ), F16(MAXHORIZ));

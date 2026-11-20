@@ -42,6 +42,9 @@ int32_t CONFIG_SetMapBestTime(uint8_t const * mapmd4, int32_t tm);
 
 void CONFIG_MapKey(int32_t which, kb_scancode key1, kb_scancode oldkey1, kb_scancode key2, kb_scancode oldkey2);
 
+#ifdef __PPU__
+extern int32_t ps3_rumble;
+#endif
 int32_t CONFIG_FunctionNameToNum(const char *func);
 char *CONFIG_FunctionNumToName(int32_t func);
 int32_t CONFIG_AnalogNameToNum(const char *func);

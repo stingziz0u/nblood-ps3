@@ -1110,6 +1110,83 @@ static void C_ReplaceQuoteSubstring(const size_t q, char const * const query, ch
 }
 #endif
 
+#ifdef __PPU__
+// PS3: the DualShock 3 button a game function is on ("Cross"), or NULL
+char const *C_PS3_FunctionButton(int const function)
+{
+    // the layer's button order (ps3layer.cpp, SDL's game controller order)
+    static char const *const buttonNames[] =
+    {
+        "Cross", "Circle", "Square", "Triangle", "Select", "PS", "Start",
+        "L3", "R3", "L1", "R1", "Up", "Down", "Left", "Right",
+    };
+
+    // the triggers first: the usual place of firing and jumping
+    if (ud.config.JoystickDigitalFunctions[5][1] == function)
+        return "R2";
+    if (ud.config.JoystickDigitalFunctions[4][1] == function)
+        return "L2";
+
+    for (int i = 0; i < ARRAY_SSIZE(buttonNames); i++)
+        if (ud.config.JoystickFunctions[i][0] == function)
+            return buttonNames[i];
+
+    return NULL;
+}
+
+// PS3: the death quote ("MASH ACTIVATOR KEY TO KILL AGAIN!", Duke's "PRESS
+// SPACE TO RESTART LEVEL") names the button Open is on, and says that Fire
+// loads a saved game (G_HandleLocalKeys). Made again from the CON's text
+// every time the quote shows (P_DoQuote), so a rebind is followed.
+void C_PS3_UpdateDeadQuote(void)
+{
+    static char original[MAXQUOTELEN];
+
+    if (!apStrings[QUOTE_DEAD])
+        return;
+
+    if (!original[0])
+        Bstrncpyz(original, apStrings[QUOTE_DEAD], sizeof(original));
+
+    char const *const openButton = C_PS3_FunctionButton(gamefunc_Open);
+    char const *const fireButton = C_PS3_FunctionButton(gamefunc_Fire);
+
+    Bstrncpyz(apStrings[QUOTE_DEAD], original, MAXQUOTELEN);
+
+    if (openButton)
+    {
+        char upper[16];
+
+        Bstrncpyz(upper, openButton, sizeof(upper));
+        Bstrupr(upper);
+
+        static char const *const names[] = { "ACTIVATOR KEY", "SPACE", "OPEN", "USE" };
+
+        for (char const *name : names)
+            if (Bstrstr(apStrings[QUOTE_DEAD], name))
+            {
+                C_ReplaceQuoteSubstring(QUOTE_DEAD, name, upper);
+                break;
+            }
+    }
+
+    if (fireButton)
+    {
+        char const *const end = " %s: LOAD";   // (the line's width: 320 pixels)
+        size_t const len = Bstrlen(apStrings[QUOTE_DEAD]);
+
+        if (len + Bstrlen(end) + 2 < MAXQUOTELEN)
+        {
+            char upper[16];
+
+            Bstrncpyz(upper, fireButton, sizeof(upper));
+            Bstrupr(upper);
+            Bsnprintf(apStrings[QUOTE_DEAD] + len, MAXQUOTELEN - len, end, upper);
+        }
+    }
+}
+#endif
+
 void C_InitQuotes(void)
 {
     for (bssize_t i = 0; i < 128; i++) C_AllocQuote(i);

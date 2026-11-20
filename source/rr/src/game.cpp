@@ -6393,6 +6393,44 @@ void G_PrintCurrentMusic(void)
     P_DoQuote(QUOTE_MUSIC, g_player[myconnectindex].ps);
 }
 
+#ifdef __PPU__
+// PS3: the DualShock 3 shakes when the player is hurt, harder the more
+// health went, and a little while the ground shakes (an earthquake, a big
+// explosion). ps3layer.cpp drives the motors from these (large motor =
+// rumbleLow, the small one from rumbleHigh 0x4000), as NBlood-PS3's
+// ctrlJoystickRumble: the large one from 160 of 255, 300..800 ms.
+static void G_PS3_Rumble(void)
+{
+    static int32_t lastHealth = -1;
+    auto const pPlayer = g_player[myconnectindex].ps;
+    int32_t const health = (pPlayer->i >= 0) ? sprite[pPlayer->i].extra : 0;
+    int strength = 0;
+
+    if (!(pPlayer->gm & MODE_GAME) || (pPlayer->gm & MODE_MENU))
+    {
+        lastHealth = -1;
+        return;
+    }
+
+    if (lastHealth > 0 && health < lastHealth)
+        strength = (lastHealth - health) * 12;
+
+    lastHealth = health;
+
+    if (g_earthquakeTime > 0)
+        strength = max(strength, 96);
+
+    if (strength <= 0 || !ps3_rumble || !CONTROL_JoystickEnabled || !joystick.hasRumble)
+        return;
+
+    strength = min(strength, 600);
+
+    joystick.rumbleLow  = max<int>(joystick.rumbleLow, min(0x7000 + strength * 0x90, 0xFFFF));
+    joystick.rumbleHigh = max<int>(joystick.rumbleHigh, strength >= 64 ? 0x8000 : 0);
+    joystick.rumbleTime = max<int>(joystick.rumbleTime, 300 + strength * 500 / 600);
+}
+#endif
+
 void G_HandleLocalKeys(void)
 {
 //    CONTROL_ProcessBinds();
@@ -6402,6 +6440,31 @@ void G_HandleLocalKeys(void)
         sub_53304();
         return;
     }
+
+#ifdef __PPU__
+    G_PS3_Rumble();
+
+    // PS3: dead, a new press of Fire opens Load Game (Open restarts the
+    // level, as always; the death quote says both, C_PS3_UpdateDeadQuote)
+    {
+        static bool fireHeld = true;
+        auto const pPlayer = g_player[myconnectindex].ps;
+        bool const fire = BUTTON(gamefunc_Fire);
+
+        if (fire && !fireHeld && sprite[pPlayer->i].extra <= 0 && !(pPlayer->gm & MODE_MENU)
+            && (!g_netServer && ud.multimode < 2) && ud.recstat != 2)
+        {
+            CONTROL_ClearButton(gamefunc_Fire);
+            Menu_Change(MENU_LOAD);
+            S_PauseSounds(true);
+            Menu_Open(myconnectindex);
+            ready2send = 0;
+            totalclock = ototalclock;
+        }
+
+        fireHeld = fire;
+    }
+#endif
 
     if (ud.recstat == 2)
     {

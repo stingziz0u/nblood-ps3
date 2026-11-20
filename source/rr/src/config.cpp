@@ -42,6 +42,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 hashtable_t h_gamefuncs    = { NUMGAMEFUNCTIONS<<1, NULL };
 
+#ifdef __PPU__
+int32_t ps3_rumble = 1;   // the cvar in_rumble (osdcmds.cpp), game.cpp's G_PS3_Rumble
+#endif
+
 int32_t CONFIG_FunctionNameToNum(const char *func)
 {
     int32_t i;

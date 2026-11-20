@@ -36,6 +36,14 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "android.h"
 #endif
 
+#ifdef __PPU__
+# define PS3_PRESS_ANY_CONTINUE "Press any button to continue"
+# define PS3_PRESS_ANY_KEY      "Press any button to continue"
+#else
+# define PS3_PRESS_ANY_KEY      "Press any key to continue"
+# define PS3_PRESS_ANY_CONTINUE "Press any key or button to continue"
+#endif
+
 #define COLOR_RED redcol
 #define COLOR_WHITE whitecol
 
@@ -2322,7 +2330,7 @@ static void G_DisplayMPResultsScreen(void)
     gametext_center(58+(RR ? 0 : 2), "Multiplayer Totals");
     gametext_center(58+10, g_mapInfo[G_LastMapInfoIndex()].name);
 
-    gametext_center_shade(RR ? 175 : 165, "Press any key or button to continue", quotepulseshade);
+    gametext_center_shade(RR ? 175 : 165, PS3_PRESS_ANY_CONTINUE, quotepulseshade);
 
     minitext(38, 80, "Name", 8, 2+8+16+128);
     minitext(269, 80, "Kills", 8, 2+8+16+128);
@@ -2545,7 +2553,7 @@ void G_BonusScreen(int32_t bonusonly)
             menutext_center(20-6, lastmapname);
         menutext_center(36-6, "Completed");
 
-        gametext_center_shade(192, "Press any key or button to continue", quotepulseshade);
+        gametext_center_shade(192, PS3_PRESS_ANY_CONTINUE, quotepulseshade);
 
         if (ud.config.MusicToggle)
             S_PlaySound(BONUSMUSIC);
@@ -2565,7 +2573,7 @@ void G_BonusScreen(int32_t bonusonly)
         if (lastmapname)
             menutext(80,16, lastmapname);
 
-        menutext(15, 192, "Press any key to continue");
+        menutext(15, 192, PS3_PRESS_ANY_KEY);
     }
 
     videoNextPage();
@@ -2650,14 +2658,14 @@ void G_BonusScreen(int32_t bonusonly)
                         menutext_center(20-6, lastmapname);
                     menutext_center(36-6, "Completed");
 
-                    gametext_center_shade(192, "Press any key or button to continue", quotepulseshade);
+                    gametext_center_shade(192, PS3_PRESS_ANY_CONTINUE, quotepulseshade);
                 }
                 else
                 {
                     if (lastmapname)
                         menutext(80, 16, lastmapname);
 
-                    menutext(15, 192, "Press any key to continue");
+                    menutext(15, 192, PS3_PRESS_ANY_KEY);
                 }
 
                 const int yystep = RR ? 16 : 10;
@@ -3143,7 +3151,7 @@ void G_BonusScreenRRRA(int32_t bonusonly)
     if (lastmapname)
         menutext(80,16, lastmapname);
 
-    menutext(15, 192, "Press any key to continue");
+    menutext(15, 192, PS3_PRESS_ANY_KEY);
 
     I_ClearAllInput();
     if (!showMap)
@@ -3233,7 +3241,7 @@ void G_BonusScreenRRRA(int32_t bonusonly)
                 if (lastmapname)
                     menutext(80, 16, lastmapname);
 
-                menutext(15, 192, "Press any key to continue");
+                menutext(15, 192, PS3_PRESS_ANY_KEY);
 
                 const int yystep = 16;
                 if (totalclock > (60*3))

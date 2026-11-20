@@ -34,7 +34,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 extern "C" {
 #endif
 
-#define NUMGAMEFUNCTIONS 63
+#define NUMGAMEFUNCTIONS 64
 #define MAXGAMEFUNCLEN 32
 
 extern char gamefunctions[NUMGAMEFUNCTIONS][MAXGAMEFUNCLEN];
@@ -106,6 +106,7 @@ enum GameFunction_t
    gamefunc_Alt_Fire,
    gamefunc_Third_Person_View,
    gamefunc_Toggle_Crouch, // TODO: Implement properly for mp
+   gamefunc_Lock_On,       // (PS3 port) hold: the view follows the nearest enemy in front
    };
 #ifdef __cplusplus
 }

@@ -101,6 +101,7 @@ char gamefunctions[NUMGAMEFUNCTIONS][MAXGAMEFUNCLEN] =
    "Alt_Fire",
    "Third_Person_View",
    "Toggle_Crouch",
+   "Lock_On",
    };
 
 #ifdef __SETUP__

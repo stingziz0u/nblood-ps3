@@ -1466,6 +1466,9 @@ int32_t registerosdcommands(void)
         },
 
         { "in_joystick","enables input from the joystick if it is present",(void *)&ud.setup.usejoystick, CVAR_BOOL|CVAR_FUNCPTR, 0, 1 },
+#ifdef __PPU__
+        { "in_rumble", "PS3: the DualShock 3 shakes when the player is hurt", (void *)&ps3_rumble, CVAR_BOOL, 0, 1 },
+#endif
         { "in_mouse","enables input from the mouse if it is present",(void *)&ud.setup.usemouse, CVAR_BOOL|CVAR_FUNCPTR, 0, 1 },
 
         { "in_aimmode", "0:toggle, 1:hold to aim", (void *)&ud.mouseaiming, CVAR_BOOL, 0, 1 },

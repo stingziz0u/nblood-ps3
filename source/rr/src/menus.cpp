@@ -676,8 +676,15 @@ static MenuEntry_t ME_VIDEOSETUP_VSYNC = MAKE_MENUENTRY("VSync:", &MF_Redfont, &
 
 
 
+#ifdef __PPU__
+// PS3: 60 (every vblank) or 30 (every second one), ps3_video.c's flips
+// (baselayer.cpp's engineFPSLimit)
+static char const *MEOSN_VIDEOSETUP_FRAMELIMIT [] = { "60 fps", "30 fps" };
+static int32_t MEOSV_VIDEOSETUP_FRAMELIMIT [] = { -1, 30 };
+#else
 static char const *MEOSN_VIDEOSETUP_FRAMELIMIT [] = { "Auto", "None", "30 fps", "60 fps", "75 fps", "100 fps", "120 fps", "144 fps", "165 fps", "240 fps" };
 static int32_t MEOSV_VIDEOSETUP_FRAMELIMIT [] = { -1, 0, 30, 60, 75, 100, 120, 144, 165, 240 };
+#endif
 static MenuOptionSet_t MEOS_VIDEOSETUP_FRAMELIMIT = MAKE_MENUOPTIONSET(MEOSN_VIDEOSETUP_FRAMELIMIT, MEOSV_VIDEOSETUP_FRAMELIMIT, 0x0);
 static MenuOption_t MEO_VIDEOSETUP_FRAMELIMIT= MAKE_MENUOPTION(&MF_Redfont, &MEOS_VIDEOSETUP_FRAMELIMIT, &r_maxfps);
 static MenuEntry_t ME_VIDEOSETUP_FRAMELIMIT = MAKE_MENUENTRY("Framerate limit:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_FRAMELIMIT, Option);
@@ -686,6 +693,27 @@ static MenuEntry_t ME_VIDEOSETUP_FRAMELIMIT = MAKE_MENUENTRY("Framerate limit:",
 // static MenuEntry_t ME_VIDEOSETUP_FRAMELIMITOFFSET = MAKE_MENUENTRY( "FPS offset:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_FRAMELIMITOFFSET, RangeInt32 );
 
 static MenuEntry_t ME_VIDEOSETUP_APPLY = MAKE_MENUENTRY( "Apply Changes", &MF_Redfont, &MEF_BigOptions_Apply, &MEO_NULL, Link );
+
+#ifdef __PPU__
+// PS3 (NBlood-PS3's Video Mode): no keyboard for the console's r_showfps
+static char const *MEOSN_VIDEOSETUP_SHOWFPS[] = { "Off", "On", "Extra", "Full" };
+static int32_t MEOSV_VIDEOSETUP_SHOWFPS[] = { 0, 1, 2, 3 };
+static MenuOptionSet_t MEOS_VIDEOSETUP_SHOWFPS = MAKE_MENUOPTIONSET( MEOSN_VIDEOSETUP_SHOWFPS, MEOSV_VIDEOSETUP_SHOWFPS, 0x0 );
+static MenuOption_t MEO_VIDEOSETUP_SHOWFPS = MAKE_MENUOPTION( &MF_Redfont, &MEOS_VIDEOSETUP_SHOWFPS, &ud.showfps );
+static MenuEntry_t ME_VIDEOSETUP_SHOWFPS = MAKE_MENUENTRY( "Show FPS:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_SHOWFPS, Option );
+
+// how much of the TV the picture uses (overscan), vid_ps3_screenfit,
+// 70..100 % in steps of 2; the layer applies it on the next frame
+static MenuRangeInt32_t MEO_VIDEOSETUP_SCREENFIT = MAKE_MENURANGE( &vid_ps3_screenfit, &MF_Redfont, 70, 100, 0, 16, DisplayTypeInteger );
+static MenuEntry_t ME_VIDEOSETUP_SCREENFIT = MAKE_MENUENTRY( "TV screen fit:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_SCREENFIT, RangeInt32 );
+
+// Polymost's six filters (gltexfiltermode: GL_NEAREST ... GL_LINEAR_MIPMAP_LINEAR)
+static char const *MEOSN_VIDEOSETUP_PS3TEXFILTER[] = { "None", "Bilinear", "None, mips", "Bilin., mips", "None, smooth", "Trilinear" };
+static int32_t MEOSV_VIDEOSETUP_PS3TEXFILTER[] = { 0, 1, 2, 3, 4, 5 };
+static MenuOptionSet_t MEOS_VIDEOSETUP_PS3TEXFILTER = MAKE_MENUOPTIONSET( MEOSN_VIDEOSETUP_PS3TEXFILTER, MEOSV_VIDEOSETUP_PS3TEXFILTER, 0x0 );
+static MenuOption_t MEO_VIDEOSETUP_PS3TEXFILTER = MAKE_MENUOPTION( &MF_Redfont, &MEOS_VIDEOSETUP_PS3TEXFILTER, &gltexfiltermode );
+static MenuEntry_t ME_VIDEOSETUP_PS3TEXFILTER = MAKE_MENUENTRY( "Texture filter:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_VIDEOSETUP_PS3TEXFILTER, Option );
+#endif
 
 
 static MenuLink_t MEO_DISPLAYSETUP_COLORCORR = { MENU_COLCORR, MA_Advance, };
@@ -844,8 +872,11 @@ static MenuEntry_t *MEL_OPTIONS[] = {
 
 static MenuEntry_t *MEL_CONTROLS[] = {
 #ifndef EDUKE32_ANDROID_MENU
+#ifndef __PPU__
+    // PS3: the pad
     &ME_OPTIONS_KEYBOARDSETUP,
     &ME_OPTIONS_MOUSESETUP,
+#endif
     &ME_OPTIONS_JOYSTICKSETUP,
 #else
     &ME_OPTIONS_TOUCHSETUP
@@ -861,9 +892,17 @@ static MenuEntry_t *MEL_VIDEOSETUP[] = {
 #ifdef USE_OPENGL
     &ME_VIDEOSETUP_RENDERER,
 #endif
+#ifndef __PPU__
+    // PS3: always full screen, always on the vblank
     &ME_VIDEOSETUP_FULLSCREEN,
     &ME_VIDEOSETUP_VSYNC,
+#endif
     &ME_VIDEOSETUP_FRAMELIMIT,
+#ifdef __PPU__
+    &ME_VIDEOSETUP_SHOWFPS,
+    &ME_VIDEOSETUP_PS3TEXFILTER,
+    &ME_VIDEOSETUP_SCREENFIT,
+#endif
     &ME_Space6_Redfont,
     &ME_VIDEOSETUP_APPLY,
 };
@@ -1075,6 +1114,11 @@ static MenuEntry_t *MEL_TOUCHSENS [] = {
 #endif
 
 static MenuOption_t MEO_JOYSTICK_ENABLE = MAKE_MENUOPTION( &MF_Redfont, &MEOS_NoYes, &ud.setup.usejoystick );
+#ifdef __PPU__
+// PS3: the DualShock 3's vibration (game.cpp's G_PS3_Rumble)
+static MenuOption_t MEO_JOYSTICK_PS3RUMBLE = MAKE_MENUOPTION( &MF_Redfont, &MEOS_OffOn, &ps3_rumble );
+static MenuEntry_t ME_JOYSTICK_PS3RUMBLE = MAKE_MENUENTRY( "Vibration:", &MF_Redfont, &MEF_BigOptionsRtSections, &MEO_JOYSTICK_PS3RUMBLE, Option );
+#endif
 static MenuEntry_t ME_JOYSTICK_ENABLE = MAKE_MENUENTRY( "Use Controller:", &MF_Redfont, &MEF_BigOptionsRtSections, &MEO_JOYSTICK_ENABLE, Option );
 
 MAKE_MENU_TOP_ENTRYLINK( "Button Assignment", MEF_BigOptionsRtSections, JOYSTICK_EDITBUTTONS, MENU_JOYSTICKBTNS );
@@ -1093,7 +1137,11 @@ static MenuLink_t MEO_JOYSTICK_DEFAULTS = { MENU_JOYDEFAULTVERIFY, MA_None, };
 static MenuEntry_t ME_JOYSTICK_DEFAULTS = MAKE_MENUENTRY( "Reset To Defaults", &MF_Redfont, &MEF_BigOptionsRtSections, &MEO_JOYSTICK_DEFAULTS, Link );
 
 static MenuEntry_t *MEL_JOYSTICKSETUP[] = {
-    &ME_JOYSTICK_ENABLE,
+#ifndef __PPU__
+    &ME_JOYSTICK_ENABLE,    // (PS3: the pad is always on)
+#else
+    &ME_JOYSTICK_PS3RUMBLE,
+#endif
     &ME_JOYSTICK_LOOKXSCALE,
     &ME_JOYSTICK_LOOKYSCALE,
     &ME_JOYSTICK_LOOKINVERT,
@@ -1409,9 +1457,12 @@ static MenuEntry_t *MEL_SOUND_DEVSETUP[] = {
     &ME_SOUND_SAMPLINGRATE,
 #ifndef EDUKE32_SIMPLE_MENU
     &ME_SOUND_NUMVOICES,
+#ifndef __PPU__
+    // PS3: the music is the CD's (music/trackNN.ogg): no MIDI
     &ME_SOUND_MIDIDRIVER,
     &ME_SOUND_OPL3STEREO,
     &ME_SOUND_SF2,
+#endif
 #endif
     &ME_Space2_Redfont,
     &ME_SOUND_RESTART,
@@ -2744,9 +2795,13 @@ static void Menu_DrawVerifyPrompt(int32_t x, int32_t y, const char * text, int n
 {
     mgametextcenter(x, y + (90<<16), text);
 #ifndef EDUKE32_ANDROID_MENU
+#ifdef __PPU__
+    char const * inputs = "Cross: accept, Circle: return";
+#else
     char const * inputs = CONTROL_LastSeenInput == LastSeenInput::Joystick
         ? "Press (A) to accept, (B) to return."
         : "(Y/N)";
+#endif
     mgametextcenter(x, y + (90<<16) + MF_Bluefont.get_yline() * numlines, inputs);
 #endif
 }
@@ -3101,7 +3156,11 @@ static void Menu_PreDraw(MenuID_t cm, MenuEntry_t *entry, const vec2_t origin)
                                                        "the complete version and get\n"
                                                        "the final three episodes.");
 
+#ifdef __PPU__
+        mgametextcenter(origin.x, origin.y + ((148+16)<<16), "Press any button...");
+#else
         mgametextcenter(origin.x, origin.y + ((148+16)<<16), "Press any key or button...");
+#endif
         break;
 
     case MENU_CREDITS:
@@ -3987,7 +4046,11 @@ static void Menu_PreOptionListDraw(MenuEntry_t *entry, const vec2_t origin)
 
         mgametextcenter(origin.x, origin.y + ((31+9)<<16), tempbuf);
 
+#ifdef __PPU__
+        mgametextcenter(origin.x, origin.y + (161<<16), "Circle To Cancel");
+#else
         mgametextcenter(origin.x, origin.y + (161<<16), "Press \"Escape\" To Cancel");
+#endif
         break;
     }
 }
@@ -4588,6 +4651,14 @@ static void Menu_EntryOptionDidModify(MenuEntry_t *entry)
 #ifdef USE_OPENGL
     else if (entry == &ME_DISPLAYSETUP_ANISOTROPY || entry == &ME_DISPLAYSETUP_TEXFILTER)
         gltexapplyprops();
+#ifdef __PPU__
+    else if (entry == &ME_VIDEOSETUP_PS3TEXFILTER)
+    {
+        // (NBlood-PS3's: the art's textures made again for the new filter)
+        gltexinvalidatetype(INVALIDATE_ART);
+        gltexapplyprops();
+    }
+#endif
     else if (entry == &ME_RENDERERSETUP_TEXQUALITY)
     {
         texcache_invalidate();
