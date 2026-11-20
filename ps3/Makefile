@@ -6,6 +6,7 @@
 #   make -C ps3            -> ps3/nblood-ps3-<version>.pkg (Blood)
 #   make -C ps3 GAME=rr    -> ps3/redneck-ps3-<version>.pkg (Redneck Rampage)
 #   make -C ps3 GAME=rrra  -> ps3/redneckra-ps3-<version>.pkg (Rides Again)
+#   make -C ps3 GAME=exhumed -> ps3/ps3xhumed-<version>.pkg (PowerSlave)
 #   make -C ps3 clean
 #   make -C ps3 verify     -> patch level of the tree and of the PKG
 #   make -C ps3 check-toolchain
@@ -67,8 +68,8 @@ BUILDDIR   := $(CURDIR)/build
 # The game: NBlood (Blood, the default), or Rednukem with GAME=rr
 # (Redneck Rampage) and GAME=rrra (Redneck Rampage Rides Again): one
 # program for both, two packages (both games' data is a REDNECK.GRP, so
-# each has its own USRDIR). PCExhumed (PowerSlave) lives in the same tree
-# for later. Each game builds in its own folders.
+# each has its own USRDIR), and PCExhumed with GAME=exhumed (PowerSlave /
+# Exhumed: PS3Xhumed). Each game builds in its own folders.
 GAME       ?= blood
 
 ifeq ($(GAME),blood)
@@ -83,8 +84,13 @@ TARGET     := redneckra-ps3
 TITLE      := Redneck Rampage Rides Again
 APPID      := REDNECKRA
 GAME_SRC   := rr
+else ifeq ($(GAME),exhumed)
+TARGET     := ps3xhumed
+TITLE      := PowerSlave Exhumed
+APPID      := PS3XHUMED
+GAME_SRC   := exhumed
 else
-$(error GAME is blood, rr or rrra)
+$(error GAME is blood, rr, rrra or exhumed)
 endif
 
 ifneq ($(GAME),blood)
@@ -146,6 +152,8 @@ COMMON += -DPS3_DEBUG_CHEATS
 endif
 ifeq ($(GAME),blood)
 COMMON += -DPS3_GAME_BLOOD -DNOONE_EXTENSIONS
+else ifeq ($(GAME),exhumed)
+COMMON += -DPS3_GAME_EXHUMED
 else
 COMMON += -DPS3_GAME_RR
 ifeq ($(GAME),rrra)
@@ -177,6 +185,8 @@ PCFLAGS  += -DPS3_APPID=\"$(APPID)\" -DPS3_BUILD_DATE=\"$(BUILD_DATE)\"
 PCFLAGS  += -I$(CURDIR)/source -I$(CURDIR)/compat $(LIBPSL1GHT_INC)
 ifeq ($(GAME),blood)
 PCFLAGS  += -DPS3_GAME_BLOOD
+else ifeq ($(GAME),exhumed)
+PCFLAGS  += -DPS3_GAME_EXHUMED
 else
 PCFLAGS  += -DPS3_GAME_RR
 ifeq ($(GAME),rrra)
@@ -241,11 +251,23 @@ RR_CPP    := game global actors gamedef gameexec gamevars player premap sector a
 	$(addprefix n64/,reality reality_music reality_player reality_render \
 		reality_sbar reality_screens reality_sound reality_util)
 
+# PCExhumed's (GNUmakefile's exhumed_game_objs, without the startup
+# windows)
+EXHUMED_CPP := aistuff anims anubis bubbles bullet cd common config enginesubs \
+	exhumed exscript fish grenade grpscan gun init input items lavadude light \
+	lighting lion map memorystream menu mono move movie mummy network object \
+	osdcmds player queen ra ramses random rat record rex roach runlist save \
+	scorp sequence serial set snake sound spider status stream switch text2 \
+	timer trigdat version view wasp
+
 # The PS3 pieces that are part of the game (renamed with the engine):
 # what the layer asks of the game.
 ifeq ($(GAME),blood)
 GAME_CPP    := $(BLOOD_CPP)
 GAMEPS3_CPP := ps3_game_blood
+else ifeq ($(GAME),exhumed)
+GAME_CPP    := $(EXHUMED_CPP)
+GAMEPS3_CPP := ps3_game_exhumed
 else
 GAME_CPP    := $(RR_CPP)
 GAMEPS3_CPP := ps3_game_rr
@@ -315,7 +337,11 @@ $(OBJDIR)/ps3/ps3_video.o: PCFLAGS := $(filter-out -O2,$(PCFLAGS)) -O1 -fno-inli
 # TOC entry per file); the renderer, the game's VM and the per-tic game
 # logic keep direct TOC access. 'make check' (after every link) fails the
 # build if .got reaches 0x10000 or any r2off stub shows up.
-ifeq ($(GAME_SRC),rr)
+ifeq ($(GAME_SRC),exhumed)
+MINTOC_GAME := $(patsubst %,$(OBJDIR)/exhumed/%.o,menu config osdcmds grpscan common \
+	init save record network serial mono version exscript text2 movie cd \
+	memorystream stream trigdat)
+else ifeq ($(GAME_SRC),rr)
 MINTOC_GAME := $(patsubst %,$(OBJDIR)/rr/%.o,menus osdcmds osdfuncs config cmdline \
 	grpscan savegame demo anim premap rts gamedef global cheats net common screens \
 	screentext sbar rrdh filestream playmve namesdyn soundsdyn \
@@ -447,6 +473,15 @@ $(OBJDIR)/rr/%.o: $(ESRC)/rr/src/%.cpp
 	@echo "CXX rr/$*.cpp"
 	@$(CXX) $(CXXFLAGS) $(RRWARN) -I$(ESRC)/rr/src -c $< -o $@
 
+# PCExhumed's: as upstream builds it; packed structs too (exhumed.h,
+# menu.h, init.cpp), so the same care as Blood's and Rednukem's
+EXWARN := -Wno-sign-compare -Wno-maybe-uninitialized -Wno-format-overflow -mstrict-align
+
+$(OBJDIR)/exhumed/%.o: $(ESRC)/exhumed/src/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "CXX exhumed/$*.cpp"
+	@$(CXX) $(CXXFLAGS) $(EXWARN) -I$(ESRC)/exhumed/src -c $< -o $@
+
 $(OBJDIR)/smk/%.o: $(ESRC)/libsmackerdec/src/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "CXX libsmackerdec/$*.cpp"
@@ -538,9 +573,9 @@ open('$(ICON0)','wb').write(b'\x89PNG\r\n\x1a\n'+png(b'IHDR',struct.pack('>IIBBB
 # the game itself, if wanted) instead of USRDIR, each in a folder of its
 # own if wanted (ps3_launcher.c).
 PKG_DIRS := USRDIR/addons
-ifeq ($(GAME_SRC),rr)
-# Redneck Rampage's CD soundtrack: track02.ogg ... (ps3_launcher.c adds
-# the folder to the search path)
+ifneq ($(GAME),blood)
+# The CD soundtrack: Redneck Rampage's track02.ogg ..., PowerSlave's
+# Track02.ogg ... (ps3_launcher.c adds the folder to the search path)
 PKG_DIRS += USRDIR/music
 endif
 ifeq ($(GAME),rr)

@@ -175,6 +175,18 @@ void G_ScanGroups(void)
         }
     }
 
+#ifdef __PPU__
+    // PS3: the launcher names the game (-gamegrp). A STUFF.DAT this
+    // PCExhumed doesn't know (its checksum isn't in grpscan.cpp's table)
+    // isn't playable: say so (as Rednukem's on the PS3).
+    if (g_selectedGrp == NULL && g_grpNamePtr != NULL)
+    {
+        wm_msgbox("Unknown game data", "%s is not a version of PowerSlave or Exhumed this PCExhumed knows "
+                  "(its checksum is in grpfiles.cache).", g_grpNamePtr);
+        Bexit(EXIT_FAILURE);
+    }
+#endif
+
     if (g_selectedGrp == NULL)
         g_selectedGrp = foundgrps;
 }

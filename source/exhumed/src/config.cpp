@@ -389,6 +389,60 @@ static void CONFIG_SetJoystickAnalogAxisFunction(int i, int function)
     CONTROL_MapAnalogAxis(i, function);
 }
 
+#ifdef __PPU__
+// PS3 (NBlood-PS3): PCExhumed has no controller defaults (the TODO in
+// CONFIG_SetDefaults). The DualShock 3 as the other Build games on the
+// PS3 play: the left stick moves and strafes, the right one turns and
+// looks; R2 fires, L2 jumps; Cross opens, Circle uses the item, L1 and
+// R3 crouch, L3 runs; the D-pad changes weapons (up/down) and items
+// (left/right); Select is the map, Triangle centers the view.
+static void CONFIG_PS3_SetGameControllerDefaults(void)
+{
+    static struct { int button, function; } const buttons[] =
+    {
+        { CONTROLLER_BUTTON_A,             gamefunc_Open },
+        { CONTROLLER_BUTTON_B,             gamefunc_Inventory },
+        { CONTROLLER_BUTTON_X,             gamefunc_Inventory },
+        { CONTROLLER_BUTTON_Y,             gamefunc_Look_Straight },
+        { CONTROLLER_BUTTON_BACK,          gamefunc_Map },
+        { CONTROLLER_BUTTON_LEFTSTICK,     gamefunc_Run },
+        { CONTROLLER_BUTTON_RIGHTSTICK,    gamefunc_Crouch },
+        { CONTROLLER_BUTTON_LEFTSHOULDER,  gamefunc_Crouch },
+        { CONTROLLER_BUTTON_DPAD_UP,       gamefunc_Previous_Weapon },
+        { CONTROLLER_BUTTON_DPAD_DOWN,     gamefunc_Next_Weapon },
+        { CONTROLLER_BUTTON_DPAD_LEFT,     gamefunc_Inventory_Left },
+        { CONTROLLER_BUTTON_DPAD_RIGHT,    gamefunc_Inventory_Right },
+    };
+
+    for (int i = 0; i < MAXJOYBUTTONSANDHATS; i++)
+    {
+        CONFIG_SetJoystickButtonFunction(i, 0, -1);
+        CONFIG_SetJoystickButtonFunction(i, 1, -1);
+    }
+
+    for (int i = 0; i < MAXJOYAXES; i++)
+    {
+        CONFIG_SetJoystickAnalogAxisScale(i, DEFAULTJOYSTICKANALOGUESCALE);
+        CONFIG_SetJoystickAnalogAxisInvert(i, 0);
+        CONFIG_SetJoystickAnalogAxisDeadSaturate(i, DEFAULTJOYSTICKANALOGUEDEAD, DEFAULTJOYSTICKANALOGUESATURATE);
+        CONFIG_SetJoystickDigitalAxisFunction(i, 0, -1);
+        CONFIG_SetJoystickDigitalAxisFunction(i, 1, -1);
+        CONFIG_SetJoystickAnalogAxisFunction(i, -1);
+    }
+
+    CONFIG_SetJoystickAnalogAxisFunction(CONTROLLER_AXIS_LEFTX, analog_strafing);
+    CONFIG_SetJoystickAnalogAxisFunction(CONTROLLER_AXIS_LEFTY, analog_moving);
+    CONFIG_SetJoystickAnalogAxisFunction(CONTROLLER_AXIS_RIGHTX, analog_turning);
+    CONFIG_SetJoystickAnalogAxisFunction(CONTROLLER_AXIS_RIGHTY, analog_lookingupanddown);
+
+    CONFIG_SetJoystickDigitalAxisFunction(CONTROLLER_AXIS_TRIGGERLEFT, 1, gamefunc_Jump);
+    CONFIG_SetJoystickDigitalAxisFunction(CONTROLLER_AXIS_TRIGGERRIGHT, 1, gamefunc_Fire);
+
+    for (auto const &b : buttons)
+        CONFIG_SetJoystickButtonFunction(b.button, 0, b.function);
+}
+#endif
+
 
 void CONFIG_SetDefaultKeys(const char (*keyptr)[kMaxGameFuncLen], bool lazy/*=false*/)
 {
@@ -458,8 +512,15 @@ void CONFIG_SetDefaults()
     else
 # endif
     {
+#ifdef __PPU__
+        // PS3: the internal resolution, which the RSX scales to the 720p
+        // output (as the other Build games on the PS3)
+        gSetup.xdim = 848;
+        gSetup.ydim = 480;
+#else
         gSetup.xdim = 1024;
         gSetup.ydim = 768;
+#endif
     }
 
 #ifdef USE_OPENGL
@@ -526,6 +587,9 @@ void CONFIG_SetDefaults()
 
     // TODO:
     //CONFIG_SetGameControllerDefaultsStandard();
+#ifdef __PPU__
+    CONFIG_PS3_SetGameControllerDefaults();
+#endif
 
 #if 0
     FXVolume       = 128;

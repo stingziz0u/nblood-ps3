@@ -1626,6 +1626,13 @@ static void NoDataScreen(void)
         "",
         "or to its addons folder. At least REDNECK.GRP; the",
         "music (track02.ogg ... track10.ogg) in the music folder.",
+#elif defined PS3_GAME_EXHUMED
+        "Copy the files of YOUR copy of PowerSlave (or Exhumed,",
+        "DOS: the CD or GOG) by FTP to:",
+        "  " PS3_USRDIR "/",
+        "",
+        "or to its addons folder: STUFF.DAT and BOOK.MOV; the",
+        "music (Track02.ogg ...) in the music folder.",
 #elif defined PS3_GAME_SW
         "Copy the files of YOUR copy of Shadow Warrior",
         "(GOG, Steam, CD or the shareware) by FTP to:",

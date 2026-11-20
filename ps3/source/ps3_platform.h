@@ -35,7 +35,7 @@ extern "C" {
 #endif
 
 /* The game this build is (ps3/Makefile: EDuke32-PS3's GAME=duke3d or
-   GAME=sw, NBlood-PS3's GAME=blood, rr or rrra) */
+   GAME=sw, NBlood-PS3's GAME=blood, rr, rrra or exhumed) */
 #if defined PS3_GAME_BLOOD
 #define PS3_GAME_NAME     "NBlood"
 #define PS3_PROGRAM       "nblood-ps3"
@@ -63,6 +63,16 @@ extern "C" {
 #endif
 #define PS3_THREAD_NAME   "rrgame"
 #define PS3_GAME_SW_OR(sw, duke) (duke)
+#elif defined PS3_GAME_EXHUMED
+/* PCExhumed: PowerSlave (or Exhumed, its European version) */
+#define PS3_GAME_NAME     "PCExhumed"
+#define PS3_PROGRAM       "ps3xhumed"
+#define PS3_LAUNCHER_NAME "POWERSLAVE EXHUMED"
+#define PS3_THREAD_NAME   "exgame"
+#define PS3_GAME_SW_OR(sw, duke) (duke)
+#ifndef PS3_APPID
+#define PS3_APPID "PS3XHUMED"
+#endif
 #elif defined PS3_GAME_SW
 #define PS3_GAME_NAME   "VoidSW"
 #define PS3_PROGRAM     "voidsw-ps3"

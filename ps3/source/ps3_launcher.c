@@ -99,6 +99,18 @@ static const known_t known[] =
     { "USER66.CON",  "Suckin' Grits on Route 66",   "route66", 1 },
 #endif
 };
+#elif defined PS3_GAME_EXHUMED
+/* PCExhumed: STUFF.DAT, PowerSlave's or Exhumed's (grpscan.cpp tells
+   them apart by its checksum); the CD soundtrack in music */
+#define LAUNCHER_TITLE PS3_LAUNCHER_NAME
+#define PROGRAM_NAME   "pcexhumed"
+#define BASE_FILE      "STUFF.DAT"
+#define MUSIC_DIR      PS3_USRDIR "/music"
+#define NO_GAME_DIR    /* PCExhumed has no -game_dir: saves in USRDIR */
+static const known_t known[] =
+{
+    { "STUFF.DAT", "PowerSlave", "exhumed", 0 },
+};
 #elif defined PS3_GAME_SW
 #define LAUNCHER_TITLE "VOIDSW"
 #define PROGRAM_NAME   "voidsw"
@@ -398,6 +410,7 @@ ArgsForEntry(const entry_t *e)
     }
 #endif
 
+#ifndef NO_GAME_DIR
     /* the game's own saves folder (made here: the engine makes only the
        last level of it) */
     mkdir(SAVES_DIR, 0777);
@@ -407,6 +420,7 @@ ArgsForEntry(const entry_t *e)
     snprintf(path, sizeof(path), "saves/%s", e->id);
     AddArg("-game_dir");
     AddArg(path);
+#endif
 }
 
 /*
