@@ -498,6 +498,46 @@ static GLuint polymost2_compileShader(GLenum shaderType, const char* const sourc
     return polymost2_compileShader(shaderType, source, &length);
 }
 
+#ifdef __PS3__
+// NBlood-PS3: the RSX memory ran out with a texture filter on
+// (ps3/source/ps3layer.cpp turns it off): the RGBA textures, one for every
+// tile and palette, are freed; the indexed ones (the tilesheets) stay.
+void polymost_ps3_dropRGBA(void)
+{
+    int dropped = 0;
+
+    for (bssize_t i = 0; i < GLTEXCACHEADSIZ; i++)
+    {
+        pthtyp **pp = &texcache.list[i];
+
+        while (*pp)
+        {
+            pthtyp *const pth = *pp;
+
+            if (pth->flags & PTH_INDEXED)
+            {
+                pp = &pth->next;
+                continue;
+            }
+
+            *pp = pth->next;
+
+            if (pth->flags & PTH_HASFULLBRIGHT)
+            {
+                glDeleteTextures(1, &pth->ofb->glpic);
+                Xfree(pth->ofb);
+            }
+
+            glDeleteTextures(1, &pth->glpic);
+            Xfree(pth);
+            dropped++;
+        }
+    }
+
+    OSD_Printf("PS3: %d RGBA textures freed (texture filter off)\n", dropped);
+}
+#endif
+
 void polymost_glreset()
 {
     buildgl_resetStateAccounting();

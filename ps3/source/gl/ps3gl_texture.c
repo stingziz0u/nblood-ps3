@@ -264,6 +264,19 @@ Bound(void)
 	return &ps3gl.textures[name];
 }
 
+/* a texture that didn't get RSX memory since the last call (ps3layer.cpp
+   turns the texture filter off: NBlood-PS3 patch 32) */
+static int ps3gl_oom;
+
+int
+PS3GL_TakeOutOfMemory(void)
+{
+	int const r = ps3gl_oom;
+
+	ps3gl_oom = 0;
+	return r;
+}
+
 static int
 Busy(const ps3gl_texture_t *t)
 {
@@ -752,6 +765,8 @@ TexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 			if (!t->data)
 			{
 				static int warned;
+
+				ps3gl_oom = 1;
 
 				if (!warned)
 				{

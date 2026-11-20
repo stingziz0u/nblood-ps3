@@ -124,8 +124,11 @@ void  PS3GL_BeginFrame(void);
 void  PS3GL_EndFrame(void);
 void  PS3GL_SetFastShaders(int on);
 int   PS3GL_FastShaders(void);
+int   PS3GL_TakeOutOfMemory(void);
 void *PS3GL_GetProcAddress(const char *name);
 }
+
+void polymost_ps3_dropRGBA(void);   // build/src/polymost.cpp
 
 char nogl = 0;
 static int gl_loaded;       // glad has ps3gl's entry points
@@ -1420,6 +1423,19 @@ void videoShowFrame(int32_t w)
 
         // where this frame's time went, for the log (ps3_prof.c)
         PS3_ProfFrame();
+
+        // The RSX memory ran out with a texture filter on: Polymost makes
+        // an RGBA texture for every tile and palette then (with mipmaps),
+        // next to the indexed tilesheets, and Redneck Rampage's art
+        // doesn't fit (Rides Again: textures in white). Back to no filter
+        // (the indexed textures, a byte a texel), the RGBA ones freed.
+        if (PS3GL_TakeOutOfMemory() && gltexfiltermode != 0)
+        {
+            PS3_Log("[gl] out of RSX memory with texture filter %d: back to none", (int)gltexfiltermode);
+            gltexfiltermode = 0;
+            polymost_ps3_dropRGBA();
+            gltexapplyprops();
+        }
         return;
     }
 #endif

@@ -1110,6 +1110,14 @@ void LocalKeys(void)
 
 bool gRestartGame = false;
 
+#ifdef __PPU__
+// NBlood-PS3: the game logic's parts in the log's slow frames (ps3_prof.c)
+static char const *const ps3PartNames[] = { "players", "busy", "events", "seq", "sprites", "post", "sound", "ambient", "3d sound" };
+# define PS3_PART(n) PS3_ProfPart(n)
+#else
+# define PS3_PART(n) do { } while (0)
+#endif
+
 void ProcessFrame(void)
 {
     char buffer[128];
@@ -1174,6 +1182,7 @@ void ProcessFrame(void)
         if (gDemo.at0)
             gDemo.Write(gFifoInput[(gNetFifoTail-1)&255]);
     }
+    PS3_PART(0);
     for (int i = connecthead; i >= 0; i = connectpoint2[i])
     {
         PLAYER *pPlayer = &gPlayer[i];
@@ -1189,18 +1198,26 @@ void ProcessFrame(void)
             }
         }
     }
+    PS3_PART(1);
     trProcessBusy();
+    PS3_PART(2);
     evProcess((int)gFrameClock);
+    PS3_PART(3);
     seqProcess(kTicsPerFrame);
+    PS3_PART(4);
     DoSectorPanning();
     actProcessSprites();
+    PS3_PART(5);
     actPostProcess();
 #ifdef POLYMER
     G_RefreshLights();
 #endif
     viewCorrectPrediction();
+    PS3_PART(6);
     sndProcess();
+    PS3_PART(7);
     ambProcess();
+    PS3_PART(8);
     viewUpdateDelirium();
     viewUpdateShake();
     sfxUpdate3DSounds();
@@ -2001,10 +2018,12 @@ RESTART:
                             faketimerhandler();
                             PS3_CRUMB("ProcessFrame", gFrame);
 #ifdef __PPU__
+                            PS3_ProfPartNames(ps3PartNames, ARRAY_SSIZE(ps3PartNames));
                             PS3_ProfBegin(PS3P_GAME);
 #endif
                             ProcessFrame();
 #ifdef __PPU__
+                            PS3_ProfPart(-1);
                             PS3_ProfEnd(PS3P_GAME);
 #endif
                         }

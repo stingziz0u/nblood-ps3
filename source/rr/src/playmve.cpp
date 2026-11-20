@@ -112,6 +112,8 @@ public:
         AudioBlock block[kAudioBlocks];
         int nWrite;
         int nRead;
+        int nAvail;         // blocks written and not played yet
+        uint32_t nLastSize; // the last block's size (silence the same length)
     };
 
     AudioData audio;
@@ -187,12 +189,30 @@ void ServeAudioSample(const char** ptr, uint32_t* length, void *userdata)
 {
     InterplayDecoder* pId = (InterplayDecoder*)userdata;
 
+    // a block the video hasn't decoded yet (it fell behind) was played
+    // again, an old one: the sound repeated. Silence until it catches up.
+    static int16_t const silence[6000] = {};
+
     mutex_lock(&pId->mutex);
+
+    if (pId->audio.nAvail <= 0)
+    {
+        uint32_t const nSize = pId->audio.nLastSize ? pId->audio.nLastSize : 1024;
+
+        *ptr = (char const *)silence;
+        *length = nSize / 2;
+
+        mutex_unlock(&pId->mutex);
+        return;
+    }
 
     uint32_t nSize = pId->audio.block[pId->audio.nRead].size;
 
     *ptr = (char*)pId->audio.block[pId->audio.nRead].buf;
     *length = nSize / 2;
+
+    pId->audio.nLastSize = nSize;
+    pId->audio.nAvail--;
 
     pId->audio.nRead++;
     if (pId->audio.nRead >= kAudioBlocks)
@@ -227,6 +247,8 @@ InterplayDecoder::InterplayDecoder()
     audio.nBitDepth   = 0;
     audio.nRead  = 0;
     audio.nWrite = 0;
+    audio.nAvail = 0;
+    audio.nLastSize = 0;
     audio.hFx = 0;
 
     pVideoBuffers[0] = nullptr;
@@ -263,7 +285,18 @@ InterplayDecoder::~InterplayDecoder()
 bool playmve(const char* filename)
 {
     InterplayDecoder *id = new InterplayDecoder;
+#if defined __PPU__ && defined USE_OPENGL
+    // PS3: the video on Polymost's indexed textures (a byte a texel, no
+    // mipmaps). With a filter on, every frame became an RGBA texture with
+    // its mipmaps made on the CPU: 75 ms a frame on the PPU (the intro a
+    // slide show, its sound repeated) and the RSX memory full.
+    int32_t const oldFilter = gltexfiltermode;
+    gltexfiltermode = 0;
+#endif
     id->Open(filename);
+#if defined __PPU__ && defined USE_OPENGL
+    gltexfiltermode = oldFilter;
+#endif
 
     delete id;
 
@@ -562,6 +595,12 @@ bool InterplayDecoder::Run()
 
                 if (audio.nWrite >= kAudioBlocks)
                     audio.nWrite = 0;
+
+                // the ring full: the oldest block (just overwritten) goes
+                if (audio.nAvail < kAudioBlocks)
+                    audio.nAvail++;
+                else if (++audio.nRead >= kAudioBlocks)
+                    audio.nRead = 0;
 
                 int nEnd = file.GetPosition();
                 int nRead = nEnd - nStart;

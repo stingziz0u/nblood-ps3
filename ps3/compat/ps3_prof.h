@@ -45,6 +45,13 @@ void PS3_ProfEnd(int id);
 void PS3_ProfBytes(int id, unsigned bytes);
 void PS3_ProfFrame(void);   /* the end of a frame: videoShowFrame */
 
+/* the game logic in parts, for the slow frames' lines: names once (the
+   game's own, up to PS3P_MAX_PARTS), then PS3_ProfPart(n) where part n
+   starts and PS3_ProfPart(-1) where the last one ends */
+#define PS3P_MAX_PARTS 12
+void PS3_ProfPartNames(char const *const *names, int count);
+void PS3_ProfPart(int part);
+
 #ifdef __cplusplus
 }
 

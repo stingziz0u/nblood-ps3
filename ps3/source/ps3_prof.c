@@ -41,6 +41,7 @@ typedef struct
     u64 t[PS3P_COUNT];        /* timebase ticks */
     unsigned n[PS3P_COUNT];   /* times begun */
     u64 b[PS3P_COUNT];        /* bytes */
+    u64 part[PS3P_MAX_PARTS]; /* the game logic's parts (ticks) */
     u64 total;
 } prof_t;
 
@@ -49,6 +50,10 @@ static u64 start[PS3P_COUNT];
 static int depth[PS3P_COUNT];
 static u64 tb_freq, frame_start, win_start, last_hitch;
 static unsigned win_frames, win_slow, win_vslow;
+
+static char const *const *part_names;
+static int part_count, part_cur = -1;
+static u64 part_start;
 
 static char const *const names[PS3P_COUNT] =
 {
@@ -98,6 +103,54 @@ static double NO_TRACE
 Ms(u64 ticks)
 {
     return (double)ticks * 1000.0 / (double)tb_freq;
+}
+
+void NO_TRACE
+PS3_ProfPartNames(char const *const *names_, int count)
+{
+    part_names = names_;
+    part_count = count < PS3P_MAX_PARTS ? count : PS3P_MAX_PARTS;
+}
+
+void NO_TRACE
+PS3_ProfPart(int part)
+{
+    u64 now;
+
+    if (!PS3_Debug_OnGameThread())
+        return;
+
+    now = Ticks();
+
+    if (part_cur >= 0 && part_cur < part_count)
+        cur.part[part_cur] += now - part_start;
+
+    part_cur = part < part_count ? part : -1;
+    part_start = now;
+}
+
+/* " | game parts: act 50.1, seq 2.0" (the ones over 0.5 ms) */
+static void NO_TRACE
+Parts(char *buf, size_t size, prof_t const *p)
+{
+    size_t len = strlen(buf);
+    int i, first = 1;
+
+    for (i = 0; i < part_count && len < size; i++)
+    {
+        double const ms = Ms(p->part[i]);
+        int w;
+
+        if (ms < 0.5)
+            continue;
+
+        w = snprintf(buf + len, size - len, "%s%s %.1f", first ? " | game parts: " : ", ",
+                     part_names[i], ms);
+        first = 0;
+
+        if (w > 0)
+            len += (size_t)w;
+    }
 }
 
 /* "game 3.1 x1, rooms 5.0, ..." for one frame (div 1) or the window's
@@ -154,7 +207,7 @@ Breakdown(char *buf, size_t size, prof_t const *p, unsigned div)
 void NO_TRACE
 PS3_ProfFrame(void)
 {
-    char buf[512];
+    char buf[768];
     u64 const now = Ticks();
     int i;
 
@@ -204,6 +257,7 @@ PS3_ProfFrame(void)
         {
             last_hitch = now;
             Breakdown(buf, sizeof(buf), &cur, 1);
+            Parts(buf, sizeof(buf), &cur);
             PS3_Log("[prof] hitch %.1f ms: %s", ms, buf);
         }
 
@@ -214,6 +268,7 @@ PS3_ProfFrame(void)
                     WINDOW_S, win_frames, win_slow, SLOW_MS, win_vslow, VSLOW_MS, buf);
 
             Breakdown(buf, sizeof(buf), &worst, 1);
+            Parts(buf, sizeof(buf), &worst);
             PS3_Log("[prof] worst %.1f ms: %s", Ms(worst.total), buf);
 
             memset(&win, 0, sizeof(win));
