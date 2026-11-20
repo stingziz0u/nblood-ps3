@@ -14,6 +14,13 @@ extern "C" void PS3_GameQuit(void)
     G_Shutdown();
 }
 
+// The texture filter turned off (ps3layer.cpp: the RSX memory ran out
+// with it on, Redneck Rampage's art is big): a quote says so.
+extern "C" void PS3_GameFilterOff(void)
+{
+    G_AddUserQuote("NOT ENOUGH VIDEO MEMORY: TEXTURE FILTER OFF");
+}
+
 // The autotest (USRDIR/autotest.txt) is EDuke32-PS3's Duke's: here the
 // flag is read and nothing more.
 int ps3_autotest;

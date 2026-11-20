@@ -35,6 +35,25 @@
 #define WINDOW_S    10
 
 int PS3_Debug_OnGameThread(void);   /* ps3_debug.c */
+int PS3_Debug_TakeSlowCalls(char *buf, unsigned size, double ticks_per_ms);
+
+/* the slow calls (FTRACE=1 builds, ps3_debug.c): this frame's, and the
+   worst frame's of the window */
+static char slow_cur[1024], slow_worst[1024];
+
+/* the lines of a "[slow] ..." block, one PS3_Log each */
+static void NO_TRACE
+LogLines(char const *s)
+{
+    while (*s)
+    {
+        char const *const nl = strchr(s, '\n');
+        int const n = nl ? (int)(nl - s) : (int)strlen(s);
+
+        PS3_Log("%.*s", n, s);
+        s += n + (nl ? 1 : 0);
+    }
+}
 
 typedef struct
 {
@@ -229,6 +248,8 @@ PS3_ProfFrame(void)
     cur.total = now - frame_start;
     frame_start = now;
 
+    PS3_Debug_TakeSlowCalls(slow_cur, sizeof(slow_cur), (double)tb_freq / 1000.0);
+
     if (PS3_LogsEnabled())
     {
         double const ms = Ms(cur.total);
@@ -251,7 +272,10 @@ PS3_ProfFrame(void)
         win.total += cur.total;
 
         if (cur.total > worst.total)
+        {
             worst = cur;
+            memcpy(slow_worst, slow_cur, sizeof(slow_worst));
+        }
 
         if (ms > HITCH_MS && Ms(now - last_hitch) >= 1000.0)
         {
@@ -259,6 +283,7 @@ PS3_ProfFrame(void)
             Breakdown(buf, sizeof(buf), &cur, 1);
             Parts(buf, sizeof(buf), &cur);
             PS3_Log("[prof] hitch %.1f ms: %s", ms, buf);
+            LogLines(slow_cur);
         }
 
         if (Ms(now - win_start) >= WINDOW_S * 1000.0 && win_frames)
@@ -270,6 +295,8 @@ PS3_ProfFrame(void)
             Breakdown(buf, sizeof(buf), &worst, 1);
             Parts(buf, sizeof(buf), &worst);
             PS3_Log("[prof] worst %.1f ms: %s", Ms(worst.total), buf);
+            LogLines(slow_worst);
+            slow_worst[0] = 0;
 
             memset(&win, 0, sizeof(win));
             memset(&worst, 0, sizeof(worst));

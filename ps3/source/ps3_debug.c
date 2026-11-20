@@ -124,6 +124,110 @@ PS3_Debug_OnGameThread(void)
 	return OnGameThread();
 }
 
+/* NBlood-PS3: the slow calls (FTRACE=1 builds). Every instrumented call
+   on the game thread timed (the timebase, no syscall); the ones of 2 ms
+   or more kept, the longest SLOW_MAX of each frame, for the slow frames'
+   lines (ps3_prof.c: "[slow] depth function ms", named by
+   ps3/tools/crashaddr.py). A call's time includes its callees': the
+   deepest slow one is where the time went. */
+#ifdef PS3_FTRACE
+#define SLOW_DEPTH  256
+#define SLOW_MAX    24
+
+typedef struct
+{
+	unsigned fn, depth;
+	uint64_t ticks;
+} slowcall_t;
+
+static unsigned  slow_depth;
+static unsigned  slow_fn[SLOW_DEPTH];
+static uint64_t  slow_t0[SLOW_DEPTH];
+static slowcall_t slow[SLOW_MAX];
+static int       slow_n;
+static uint64_t  slow_min = 79800 * 2;     /* 2 ms at 79.8 MHz */
+
+static inline uint64_t NO_TRACE
+SlowTicks(void)
+{
+	uint64_t t;
+
+	__asm__ volatile("mftb %0" : "=r"(t));
+	return t;
+}
+
+static void NO_TRACE
+SlowRecord(unsigned fn, unsigned depth, uint64_t ticks)
+{
+	int i, small = 0;
+
+	if (slow_n < SLOW_MAX)
+	{
+		i = slow_n++;
+	}
+	else
+	{
+		for (i = 1; i < SLOW_MAX; i++)
+			if (slow[i].ticks < slow[small].ticks)
+				small = i;
+
+		if (slow[small].ticks >= ticks)
+			return;
+
+		i = small;
+	}
+
+	slow[i].fn = fn;
+	slow[i].depth = depth;
+	slow[i].ticks = ticks;
+}
+#endif
+
+/* this frame's slow calls, outermost first, in lines of "[slow] depth
+   function ms" (ms = ticks / ticks_per_ms); cleared. Empty without
+   FTRACE. */
+int NO_TRACE
+PS3_Debug_TakeSlowCalls(char *buf, unsigned size, double ticks_per_ms)
+{
+	unsigned len = 0;
+
+	if (size)
+		buf[0] = 0;
+
+#ifdef PS3_FTRACE
+	{
+		int i, j;
+
+		/* by depth, then the longest first */
+		for (i = 1; i < slow_n; i++)
+		{
+			slowcall_t const s = slow[i];
+
+			for (j = i; j > 0 && (slow[j - 1].depth > s.depth ||
+					(slow[j - 1].depth == s.depth && slow[j - 1].ticks < s.ticks)); j--)
+				slow[j] = slow[j - 1];
+
+			slow[j] = s;
+		}
+
+		for (i = 0; i < slow_n && len < size; i++)
+		{
+			int const w = snprintf(buf + len, size - len, "%s[slow] %u %08x %.1f", len ? "\n" : "",
+								   slow[i].depth, slow[i].fn, slow[i].ticks / ticks_per_ms);
+
+			if (w > 0)
+				len += (unsigned)w;
+		}
+
+		slow_n = 0;
+	}
+#else
+	(void)ticks_per_ms;
+#endif
+
+	return (int)len;
+}
+
 void NO_TRACE __cyg_profile_func_enter(void *fn, void *site);
 void NO_TRACE __cyg_profile_func_exit(void *fn, void *site);
 
@@ -133,7 +237,19 @@ __cyg_profile_func_enter(void *fn, void *site)
 	(void)site;
 
 	if (OnGameThread())
+	{
 		ftrace[ftrace_n++ & (NFTRACE - 1)] = (unsigned)(uintptr_t)fn;
+
+#ifdef PS3_FTRACE
+		if (slow_depth < SLOW_DEPTH)
+		{
+			slow_fn[slow_depth] = (unsigned)(uintptr_t)fn;
+			slow_t0[slow_depth] = SlowTicks();
+		}
+
+		slow_depth++;
+#endif
+	}
 }
 
 void NO_TRACE
@@ -142,7 +258,26 @@ __cyg_profile_func_exit(void *fn, void *site)
 	(void)site;
 
 	if (OnGameThread())
+	{
 		ftrace[ftrace_n++ & (NFTRACE - 1)] = (unsigned)(uintptr_t)fn | 1;
+
+#ifdef PS3_FTRACE
+		if (slow_depth)
+		{
+			slow_depth--;
+
+			/* the same function (a call that never came back, a
+			   longjmp, leaves the stack out of step: skipped) */
+			if (slow_depth < SLOW_DEPTH && slow_fn[slow_depth] == (unsigned)(uintptr_t)fn)
+			{
+				uint64_t const dt = SlowTicks() - slow_t0[slow_depth];
+
+				if (dt >= slow_min)
+					SlowRecord(slow_fn[slow_depth], slow_depth, dt);
+			}
+		}
+#endif
+	}
 }
 
 /* From the main thread, after the game thread died. */

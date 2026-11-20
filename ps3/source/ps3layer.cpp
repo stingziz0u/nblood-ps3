@@ -129,6 +129,7 @@ void *PS3GL_GetProcAddress(const char *name);
 }
 
 void polymost_ps3_dropRGBA(void);   // build/src/polymost.cpp
+extern "C" void PS3_GameFilterOff(void);    // ps3_game_*.cpp
 
 char nogl = 0;
 static int gl_loaded;       // glad has ps3gl's entry points
@@ -1435,6 +1436,7 @@ void videoShowFrame(int32_t w)
             gltexfiltermode = 0;
             polymost_ps3_dropRGBA();
             gltexapplyprops();
+            PS3_GameFilterOff();
         }
         return;
     }

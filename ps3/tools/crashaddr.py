@@ -100,6 +100,11 @@ def main():
                     words.append(('<' if v & 1 else '>') +
                                  name_of(v & ~1, desc, code, starts))
                 print('[ftrace] ' + ' '.join(words))
+            elif re.match(r'\[slow\] +\d+ [0-9a-f]{8} ', line):
+                # the slow calls of a slow frame (ps3_prof.c): depth,
+                # function, ms; indented by depth
+                d, a, ms = line.split()[1:4]
+                print('[slow] %s%s %s ms' % ('  ' * int(d), name_of(int(a, 16), desc, code, starts), ms))
             elif line.startswith('[crumb]') and '@' in line:
                 head, a = line.rsplit('@', 1)
                 print('%s@%s' % (head, name_of(int(a, 16), desc, code, starts)))

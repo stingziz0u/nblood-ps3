@@ -2904,6 +2904,17 @@ static void Menu_PreDraw(MenuID_t cm, MenuEntry_t *entry, const vec2_t origin)
         mgametextcenter(origin.x, origin.y + (144<<16), "Activate in-game with Shift-F#");
         break;
 
+#ifdef __PPU__
+    case MENU_VIDEOSETUP:
+        // NBlood-PS3: a filter keeps a full color texture of every tile
+        // next to the indexed ones; Redneck Rampage's art may not fit in
+        // the RSX's memory (ps3layer.cpp turns it off then)
+        if (gltexfiltermode != 0)
+            mgametextcenter(origin.x, origin.y + (164<<16), "Filters use a lot of video memory:\n"
+                                                             "if it runs out, it goes back to None");
+        break;
+#endif
+
     case MENU_COLCORR:
     case MENU_COLCORR_INGAME:
         if (REALITY)

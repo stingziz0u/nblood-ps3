@@ -6,6 +6,7 @@
 #include "build.h"
 #include "config.h"
 #include "sound.h"
+#include "view.h"
 
 // The XMB's "Quit Game" (ps3layer.cpp): the settings saved and the sound
 // stopped, as ShutDown does on the way out of the game's menu, without
@@ -14,6 +15,13 @@ extern "C" void PS3_GameQuit(void)
 {
     CONFIG_WriteSetup(0);
     sndTerm();
+}
+
+// The texture filter turned off (ps3layer.cpp: the RSX memory ran out
+// with it on): a line on the screen says so.
+extern "C" void PS3_GameFilterOff(void)
+{
+    viewSetMessage("Not enough video memory: texture filter off");
 }
 
 // The autotest (USRDIR/autotest.txt) is EDuke32-PS3's: here the flag is
