@@ -57,7 +57,17 @@ class FileStream
         int32_t GetPosition();
 
     private:
-        buildvfs_kfd file;
+        buildvfs_kfd file = -1;
+
+        // A read buffer: the MVE decoder reads its stream a byte at a time,
+        // and each kread of a file outside the group is a system call (on
+        // the PS3 a slow one: Rides Again's intro crawled).
+        int32_t Fill();
+
+        uint8_t *buffer = nullptr;
+        uint32_t bufferLength = 0;      // bytes in it
+        uint32_t bufferPosition = 0;    // the next one to read
+        int32_t  bufferFileOffset = 0;  // the file's offset of buffer[0]
 };
 
 } // close namespace RedNukem
