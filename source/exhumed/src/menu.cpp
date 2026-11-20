@@ -1037,6 +1037,12 @@ void menu_AdjustVolume()
     }
 }
 
+#ifdef __PPU__
+// PS3: the XMB's keyboard (ps3/source/ps3_osk.c)
+extern "C" int PS3_OSK_Open(const char *title, const char *start, int maxlen);
+extern "C" int PS3_OSK_Poll(char *buf, int size);
+#endif
+
 int menu_NewGameMenu()
 {
     const char endMark = 0xF;
@@ -1173,6 +1179,14 @@ int menu_NewGameMenu()
     char *pName = nameList[nSlot];
     int nNameLength = strlen(pName);
 
+#ifdef __PPU__
+    // PS3: the name from the XMB's keyboard, starting with the slot's old
+    // one (PowerSlave's typing needs a keyboard). What it gives is typed
+    // into the loop below as the keys were, Enter after it (Escape if
+    // canceled): the same checks, the same "Overwrite?".
+    bool bOsk = PS3_OSK_Open("PowerSlave: name of the saved game", pName, 24) != 0;
+#endif
+
     memset(pName, 0, nNameLength);
 
     menu_DoPlasma();
@@ -1196,6 +1210,29 @@ int menu_NewGameMenu()
     while (1)
     {
         HandleAsync();
+
+#ifdef __PPU__
+        if (bOsk)
+        {
+            char sText[64];
+            int const r = PS3_OSK_Poll(sText, sizeof(sText));
+
+            if (r)
+            {
+                bOsk = false;
+
+                if (r > 0)
+                {
+                    for (char const *c = sText; *c && !keyBufferFull(); c++)
+                        keyBufferInsert(*c);
+
+                    keyBufferInsert(asc_Enter);
+                }
+                else
+                    keyBufferInsert(asc_Escape);
+            }
+        }
+#endif
 
         overwritesprite(x, y, kMenuCursorTile, 0, 2, kPalNormal);
         overwritesprite(233, y, kMenuCursorTile, 0, 10, kPalNormal);

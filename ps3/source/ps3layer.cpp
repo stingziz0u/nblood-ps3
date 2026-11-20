@@ -139,6 +139,10 @@ extern "C" void PS3_GameFilterOff(void);    // ps3_game_*.cpp
 // then; Start is Escape always, the game's menu).
 extern "C" int PS3_GamePadKeys(void) __attribute__((weak));
 
+// the XMB's keyboard (ps3_osk.c): while it's up it has the pad
+extern "C" int  PS3_OSK_Active(void);
+extern "C" void PS3_OSK_Shutdown(void);
+
 char nogl = 0;
 static int gl_loaded;       // glad has ps3gl's entry points
 static int gl_started;      // ps3gl runs on the RSX (an OpenGL mode was set)
@@ -423,6 +427,7 @@ void PS3_Exit(int code)
 
     PS3_Log("[9] exit(%d): shutting down", code);
 
+    PS3_OSK_Shutdown();
     PS3Drv_PCM_Shutdown();
     PS3_Video_Shutdown();
 
@@ -900,11 +905,28 @@ static void PollPad(void)
     if (!appactive)
         return;
 
+    // the XMB's keyboard has the pad: nothing for the game, and what's
+    // still held when it closes (the X that accepted) isn't a press
+    static bool oskWasUp;
+
+    if (PS3_OSK_Active())
+    {
+        PadReleaseAll();
+        oskWasUp = true;
+        return;
+    }
+
     int32_t bits = 0;
 
     for (auto const &m : padmap)
         if (st.buttons & m.ps3)
             bits |= 1 << m.button;
+
+    if (oskWasUp)
+    {
+        oskWasUp = false;
+        pad_lastbits = bits;
+    }
 
     int32_t const pressed  = bits & ~pad_lastbits;
     int32_t const released = pad_lastbits & ~bits;

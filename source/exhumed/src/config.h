@@ -99,6 +99,7 @@ enum {
 	gamefunc_AutoRun,
     gamefunc_Map_Follow_Mode,
 	gamefunc_Third_Person_View,
+	gamefunc_Lock_On,           // (PS3 port) held: the view follows the nearest enemy in front
 	kMaxGameFunctions
 };
 

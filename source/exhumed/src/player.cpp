@@ -169,6 +169,139 @@ fixed     droll;
 extern void testsave();
 extern void testload();
 
+// Lock-on (gamefunc_Lock_On, held; the PS3 port's, as EDuke32-PS3's,
+// NBlood-PS3's and Rednukem-PS3's, no default binding): the view turns to
+// the nearest enemy in front that can be seen, up and down too, and stays
+// on it while the button is held and the enemy lives. Moving and strafing
+// stay free (circling a target). The enemies are what the game's own aim
+// takes (view.cpp's analyzesprites: blocking sprites under status 150),
+// the creatures' statuses (99..149) less the players' (100).
+
+// the middle of a sprite, height wise
+static int LockOnZ(int nSprite)
+{
+    return sprite[nSprite].z - GetSpriteHeight(nSprite) / 2;
+}
+
+static int LockOnTarget(int nCurrent)
+{
+    int const nPlayerSprite = PlayerList[nLocalPlayer].nSprite;
+    spritetype const *const pPlayer = &sprite[nPlayerSprite];
+    int const eyeZ = pPlayer->z + eyelevel[nLocalPlayer];
+    int const viewAng = fix16_to_int(PlayerList[nLocalPlayer].q16angle + nPlayerDAng) & kAngleMask;
+    int nBest = -1;
+    int64_t nBestScore = INT64_MAX;
+
+    for (int nStat = 99; nStat < 150; nStat++)
+    {
+        if (nStat == 100)
+            continue;
+
+        for (int nSprite = headspritestat[nStat]; nSprite >= 0; nSprite = nextspritestat[nSprite])
+        {
+            spritetype const *const pSprite = &sprite[nSprite];
+
+            if (nSprite == nPlayerSprite || !(pSprite->cstat & 0x101) || (pSprite->cstat & 0x8000))
+                continue;
+
+            int const dx = pSprite->x - pPlayer->x;
+            int const dy = pSprite->y - pPlayer->y;
+            int const dist = ksqrt(dx * dx + dy * dy);
+
+            if (dist < 128 || dist > 24576)
+                continue;
+
+            // in front: 45 degrees either way (90 for the one already locked)
+            int const angDiff = klabs(((getangle(dx, dy) - viewAng + 1024) & kAngleMask) - 1024);
+
+            if (angDiff > (nSprite == nCurrent ? 512 : 256))
+                continue;
+
+            if (!cansee(pPlayer->x, pPlayer->y, eyeZ, pPlayer->sectnum, pSprite->x, pSprite->y, LockOnZ(nSprite), pSprite->sectnum))
+                continue;
+
+            int64_t nScore = (int64_t)angDiff * 64 + dist;
+
+            if (nSprite == nCurrent)
+                nScore >>= 2;  // stays on it unless another is much better
+
+            if (nScore < nBestScore)
+            {
+                nBestScore = nScore;
+                nBest = nSprite;
+            }
+        }
+    }
+
+    return nBest;
+}
+
+// what turns the view (16.16, 2048 a turn) and tilts it (16.16, in the
+// 1024-a-turn units of PlayerInterruptKeys' horizAngle); false if not on
+// an enemy (the stick's then)
+static bool LockOn(fix16_t &q16avel, fix16_t &q16horz)
+{
+    static int nTarget = -1;
+    static uint64_t lastTicks;
+
+    uint64_t const now = timerGetNanoTicks();
+    double const dt = lastTicks ? (double)(now - lastTicks) / (double)timerGetNanoTickRate() : 0.0;
+
+    lastTicks = now;
+
+    if (!BUTTON(gamefunc_Lock_On) || nMapMode || PlayerList[nLocalPlayer].nHealth <= 0
+        || PlayerList[nLocalPlayer].nSprite < 0 || sprite[PlayerList[nLocalPlayer].nSprite].sectnum < 0)
+    {
+        nTarget = -1;
+        return false;
+    }
+
+    nTarget = LockOnTarget(nTarget);
+
+    if (nTarget < 0)
+        return false;
+
+    spritetype const *const pPlayer = &sprite[PlayerList[nLocalPlayer].nSprite];
+    spritetype const *const pSprite = &sprite[nTarget];
+    float const dx = (float)(pSprite->x - pPlayer->x);
+    float const dy = (float)(pSprite->y - pPlayer->y);
+    float const dist = max(1.f, sqrtf(dx * dx + dy * dy));
+
+    // a fraction of the way each call: there in about a tenth of a second
+    float const follow = (float)min(1.0, dt * 14.0);
+
+    float const wantAng = atan2f(dy, dx) * (1024.f / fPI);
+    float const dAng = fmodf(wantAng - fix16_to_float(PlayerList[nLocalPlayer].q16angle + nPlayerDAng) + 3072.f, 2048.f) - 1024.f;
+
+    q16avel = fix16_from_float(dAng * follow);
+
+    // z is 16 times finer than x/y, up is negative; looking up is above 92
+    int const eyeZ = pPlayer->z + eyelevel[nLocalPlayer];
+    float const wantPitch = atan2f((float)(eyeZ - LockOnZ(nTarget)) * (1.f / 16.f), dist) * (512.f / fPI);
+    float const nowPitch = atan2f(fix16_to_float(nVertPan[nLocalPlayer]) - 92.f, 128.f) * (512.f / fPI);
+
+    q16horz = fix16_from_float((wantPitch - nowPitch) * follow);
+    return true;
+}
+
+#ifdef __PPU__
+extern float CONTROL_JoySensitivityUnit;   // mact control.cpp (in_joyunit)
+
+// PS3: a stick all the way moves as fast as the keys. mact gives an axis
+// at most 32767 * in_joyunit (0.2) * its scale (JoystickAnalogueScale /
+// 24576): with the default scale (65536) that's about half of the 32767
+// this code divides by, so the player walked at about half speed (as
+// Rednukem did). The move is taken against what the default scale gives
+// at the stick's edge: the OPTIONS' SENSITIVITY still counts (above 100%
+// full speed comes sooner, the clamp to 12 holds it; below, slower).
+static int PS3AnalogMove(int const value, int const keyMove)
+{
+    float const extent = 32767.f * CONTROL_JoySensitivityUnit * (float)DEFAULTJOYSTICKANALOGUESCALE / 24576.f;
+
+    return (int)((float)value * (float)keyMove / max(extent, 1.f));
+}
+#endif
+
 void PlayerInterruptKeys()
 {
     ControlInfo info;
@@ -288,8 +421,13 @@ void PlayerInterruptKeys()
     if (mouseflip) q16horz = -q16horz;
 
     q16horz -= fix16_from_int(info.dpitch) / analogExtent * analogTurnAmount;
+#ifdef __PPU__
+    svel -= PS3AnalogMove(info.dx, keyMove);
+    fvel -= PS3AnalogMove(info.dz, keyMove);
+#else
     svel -= info.dx * keyMove / analogExtent;
     fvel -= info.dz * keyMove / analogExtent;
+#endif
 
     if (BUTTON(gamefunc_Strafe))
     {
@@ -348,6 +486,16 @@ void PlayerInterruptKeys()
 
     if (BUTTON(gamefunc_Move_Backward))
         fvel += -keyMove;
+
+    {
+        fix16_t lockAvel = 0, lockHorz = 0;
+
+        if (LockOn(lockAvel, lockHorz))
+        {
+            q16avel = lockAvel;
+            q16horz = lockHorz;
+        }
+    }
 
     fvel = clamp(fvel, -12, 12);
     svel = clamp(svel, -12, 12);

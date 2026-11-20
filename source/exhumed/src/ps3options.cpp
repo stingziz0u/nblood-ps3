@@ -453,6 +453,7 @@ struct OptItem
     const OptMenu *child;         // a link's
     void (*run)(void);            // an action's
     const char *hint;             // on the bottom line, while selected
+    const char *const *valueHints; // or one per value (a cycle's)
 };
 
 struct OptMenu
@@ -482,12 +483,14 @@ static void Message(const char *s)
 // --- GAME SETUP
 
 static const char *const pzRunMode[] = { "CLASSIC", "MODERN" };
+// player.cpp: classic, auto run ^ Run; modern, auto run | Run
+static const char *const pzRunModeHints[] = { "HOLDING RUN REVERSES AUTO RUN", "HOLDING RUN ALWAYS RUNS" };
 
 static OptItem itemsGame[] =
 {
     ITEM_BOOL("AUTO RUN", 0, [](int) { return auto_run ? 1 : 0; }, [](int, int v) { auto_run = v; }, NULL),
-    ITEM_CYCLE("RUN BUTTON", 0, [](int) { return runkey_mode ? 1 : 0; }, [](int, int v) { runkey_mode = v; }, pzRunMode,
-        "CLASSIC SWITCHES AUTO RUN"),
+    { "RUN BUTTON", kItemCycle, 0, [](int) { return runkey_mode ? 1 : 0; }, [](int, int v) { runkey_mode = v; },
+        0, ARRAY_SSIZE(pzRunMode) - 1, 1, pzRunMode, NULL, NULL, NULL, pzRunModeHints },
 };
 
 static OptMenu menuGame = { "GAME SETUP", itemsGame, ARRAY_SSIZE(itemsGame) };
@@ -650,7 +653,7 @@ static void SetButton(int arg, int v)
     }
 }
 
-#define ITEM_BUTTON(l, a) { l, kItemCycle, a, GetButton, SetButton, 0, 0, 1, pzFuncNames, NULL, NULL, NULL }
+#define ITEM_BUTTON(l, a) { l, kItemCycle, a, GetButton, SetButton, 0, 0, 1, pzFuncNames, NULL, NULL, "CROSS FOR THE LIST" }
 
 static OptItem itemsButtons[] =
 {
@@ -877,6 +880,8 @@ static void Draw(OptMenu const &m, int nSel, int nTop, int nRows, int nLineH, in
 
     if (sMessage[0] && (int)totalclock - nMessageClock < 0)
         pBottom = sMessage;
+    else if (m.items[nSel].valueHints && m.items[nSel].get)
+        pBottom = m.items[nSel].valueHints[clamp(m.items[nSel].get(m.items[nSel].arg), m.items[nSel].min, ItemMax(m.items[nSel])) - m.items[nSel].min];
     else if (m.items[nSel].hint)
         pBottom = m.items[nSel].hint;
 #ifdef USE_OPENGL
@@ -890,12 +895,45 @@ static void Draw(OptMenu const &m, int nSel, int nTop, int nRows, int nLineH, in
     videoNextPage();
 }
 
-static void RunMenu(OptMenu const &m)
+// a button's function picked from the list (BUTTON SETUP's Cross): a page
+// of its own, the current one selected; Cross takes it, Circle leaves it
+static OptItem itemsPick[kMaxGameFunctions + 1];
+static OptMenu menuPick = { NULL, itemsPick, 0 };
+
+static void RunMenu(OptMenu const &m, int *pPick = NULL);
+
+static void PickFunction(OptItem &it)
+{
+    for (int i = 0; i < nFuncCount; i++)
+    {
+        itemsPick[i] = OptItem();
+        itemsPick[i].label = pzFuncNames[i];
+        itemsPick[i].type = kItemAction;
+    }
+
+    menuPick.title = it.label;
+    menuPick.count = nFuncCount;
+
+    int nPick = it.get(it.arg);
+
+    RunMenu(menuPick, &nPick);
+
+    if (nPick >= 0 && nPick != it.get(it.arg))
+        it.set(it.arg, nPick);
+}
+
+static void RunMenu(OptMenu const &m, int *pPick)
 {
     int const nLineH = max(TextHeight() + 2, 9);
     int const y0 = 92;
     int const nRows = (184 - y0) / nLineH;
     int nSel = 0, nTop = 0;
+
+    if (pPick)
+    {
+        nSel = clamp(*pPick, 0, m.count - 1);
+        *pPick = -1;
+    }
 
     KB_ClearKeysDown();
     KB_FlushKeyboardQueue();
@@ -950,10 +988,26 @@ static void RunMenu(OptMenu const &m)
             KB_KeyDown[sc_Return] = 0;
             KB_KeyDown[sc_Space] = 0;
 
+            if (pPick)
+            {
+                PlayLocalSound(StaticSound[kSoundSwitchFoot], 0);
+                *pPick = nSel;
+                KB_FlushKeyboardQueue();
+                return;
+            }
+
             if (it.type == kItemLink)
             {
                 PlayLocalSound(StaticSound[kSoundSwitchFoot], 0);
                 RunMenu(*it.child);
+                KB_ClearKeysDown();
+                continue;
+            }
+
+            if (it.names == pzFuncNames)
+            {
+                PlayLocalSound(StaticSound[kSoundSwitchFoot], 0);
+                PickFunction(it);
                 KB_ClearKeysDown();
                 continue;
             }

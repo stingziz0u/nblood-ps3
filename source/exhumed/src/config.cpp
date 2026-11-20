@@ -86,6 +86,7 @@ const char gamefunctions[kMaxGameFunctions][kMaxGameFuncLen] =
     "AutoRun",
     "Map_Follow_Mode",
 	"Third_Person_View",
+    "Lock_On",
 };
 
 const char keydefaults[kMaxGameFunctions * 2][kMaxGameFuncLen] =
@@ -301,6 +302,7 @@ void SetupGameButtons()
     CONTROL_DefineFlag(gamefunc_AutoRun,                kFalse);
     CONTROL_DefineFlag(gamefunc_Map_Follow_Mode,        kFalse);
     CONTROL_DefineFlag(gamefunc_Third_Person_View,      kFalse);
+    CONTROL_DefineFlag(gamefunc_Lock_On,                kFalse);
 }
 
 hashtable_t h_gamefuncs    = { kMaxGameFunctions<<1, NULL };
@@ -549,6 +551,11 @@ void CONFIG_SetDefaults()
     FXVolume = 125;
     MusicToggle = 1;
     MusicVolume = 125;
+#ifdef __PPU__
+    // PS3: both at 50% (the OPTIONS' 0..100 in steps of 5)
+    FXVolume = 128;
+    MusicVolume = 128;
+#endif
     NumChannels = 2;
     NumBits = 16;
     NumVoices = 32;
