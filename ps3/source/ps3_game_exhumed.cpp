@@ -38,6 +38,6 @@ extern "C" int PS3_GamePadKeys(void)
     return (uint32_t)timerGetTicks() - ps3_ex_inputtime > 200;
 }
 
-// The autotest (USRDIR/autotest.txt) is EDuke32-PS3's: here the flag is
-// read and nothing more.
+// The autotest (USRDIR/autotest.txt, with logs.txt): the video memory
+// test, every map with the texture filter on (exhumed.cpp, PS3_VramTest).
 int ps3_autotest;

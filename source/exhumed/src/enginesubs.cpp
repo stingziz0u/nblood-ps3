@@ -141,6 +141,22 @@ void printext(int x, int y, const char *buffer, short tilenum)
     }
 }
 
+#ifdef __PPU__
+// NBlood-PS3: the video memory test (USRDIR/autotest.txt, exhumed.cpp's
+// PS3_VramTest): every tile precache() loads, with the palette it's seen
+// in (the floor's, ceiling's, wall's or sprite's)
+#include <vector>
+extern int ps3_autotest;
+std::vector<uint32_t> ps3_cacheList;   // tile << 9 | pal << 1 | sprite
+static int ps3CachePal, ps3CacheType;
+# define PS3_CACHEPAL(p, t) (ps3CachePal = (p), ps3CacheType = (t))
+# define PS3_NOTE(n) do { if (ps3_autotest && (unsigned)(n) < MAXTILES) \
+        ps3_cacheList.push_back(((uint32_t)(n) << 9) | ((uint32_t)(ps3CachePal & 255) << 1) | ps3CacheType); } while (0)
+#else
+# define PS3_CACHEPAL(p, t) ((void)0)
+# define PS3_NOTE(n) ((void)0)
+#endif
+
 void precache()
 {
     int i;
@@ -148,32 +164,35 @@ void precache()
     for (i = 0; i < numsectors; i++)
     {
         short j = sector[i].ceilingpicnum;
-        if (waloff[j] == 0) tileLoad(j);
+        PS3_CACHEPAL(sector[i].ceilingpal, 0);
+        PS3_NOTE(j); if (waloff[j] == 0) tileLoad(j);
         if (picanm[j].sf & PICANM_ANIMTYPE_MASK)
         {
             int k;
             for (k = 1; k <= picanm[j].num; k++)
-                if (waloff[j+k] == 0) tileLoad(j+k);
+                { PS3_NOTE(j+k); if (waloff[j+k] == 0) tileLoad(j+k); }
         }
         j = sector[i].floorpicnum;
-        if (waloff[j] == 0) tileLoad(j);
+        PS3_CACHEPAL(sector[i].floorpal, 0);
+        PS3_NOTE(j); if (waloff[j] == 0) tileLoad(j);
         if (picanm[j].sf & PICANM_ANIMTYPE_MASK)
         {
             int k;
             for (k = 1; k <= picanm[j].num; k++)
-                if (waloff[j+k] == 0) tileLoad(j+k);
+                { PS3_NOTE(j+k); if (waloff[j+k] == 0) tileLoad(j+k); }
         }
     }
 
     for (i = 0; i < numwalls; i++)
     {
         short j = wall[i].picnum;
-        if (waloff[j] == 0) tileLoad(j);
+        PS3_CACHEPAL(wall[i].pal, 0);
+        PS3_NOTE(j); if (waloff[j] == 0) tileLoad(j);
         if (picanm[j].sf & PICANM_ANIMTYPE_MASK)
         {
             int k;
             for (k = 1; k <= picanm[j].num; k++)
-                if (waloff[j+k] == 0) tileLoad(j+k);
+                { PS3_NOTE(j+k); if (waloff[j+k] == 0) tileLoad(j+k); }
         }
     }
 
@@ -182,12 +201,13 @@ void precache()
         if (sprite[i].statnum < kMaxStatus)
         {
             short j = sprite[i].picnum;
-            if (waloff[j] == 0) tileLoad(j);
+            PS3_CACHEPAL(sprite[i].pal, 1);
+            PS3_NOTE(j); if (waloff[j] == 0) tileLoad(j);
             if (picanm[j].sf & PICANM_ANIMTYPE_MASK)
             {
                 int k;
                 for (k = 1; k <= picanm[j].num; k++)
-                    if (waloff[j+k] == 0) tileLoad(j+k);
+                    { PS3_NOTE(j+k); if (waloff[j+k] == 0) tileLoad(j+k); }
             }
         }
     }

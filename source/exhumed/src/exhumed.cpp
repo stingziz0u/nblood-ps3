@@ -22,6 +22,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 //-------------------------------------------------------------------------
 
 #include "compat.h"
+#ifdef __PPU__
+#include <vector>
+#endif
 #include "baselayer.h"
 #include "renderlayer.h"
 #include "typedefs.h"
@@ -1809,6 +1812,63 @@ void ExitGame()
 
 static int32_t nonsharedtimer;
 
+#ifdef __PPU__
+// The video memory test (USRDIR/autotest.txt with logs.txt): every map
+// loaded in turn with the texture filter on (trilinear, mipmaps: the most
+// memory), what precache() loads made into textures
+// (polymost_ps3_vramMeasure), "[vramtest]" lines in the log, then back to
+// the XMB. A texture that doesn't fit is counted, nothing turns off.
+extern int ps3_autotest;
+extern std::vector<uint32_t> ps3_cacheList;   // enginesubs.cpp
+int polymost_ps3_vramMeasure(char const *name, uint32_t *keys, int numKeys);
+void polymost_ps3_dropRGBA(void);
+extern "C" void PS3_Log(const char *fmt, ...);
+extern "C" int PS3_ExitRequested(void);
+extern "C" void PS3_Exit(int code) __attribute__((noreturn));
+extern "C" void PS3_GameQuit(void);
+
+static void PS3_VramTest(void)
+{
+    int maps = 0, shortMaps = 0;
+
+    gltexfiltermode = 5;
+    gltexinvalidatetype(INVALIDATE_ART);
+    gltexapplyprops();
+    PS3_Log("[vramtest] PowerSlave: every map with texture filter 5 (trilinear)");
+
+    for (int i = 0; i < nTotalPlayers; i++)
+        InitPlayerInventory(GrabPlayer());
+
+    for (int nMap = 0; nMap < 100 && !PS3_ExitRequested(); nMap++)
+    {
+        char name[32];
+        Bsnprintf(name, sizeof(name), "lev%d.map", nMap);
+
+        buildvfs_kfd const h = kopen4loadfrommod(name, 0);
+        if (h == buildvfs_kfd_invalid)
+            continue;
+        kclose(h);
+
+        polymost_ps3_dropRGBA();   // each map from nothing, as a new one in the game
+        ps3_cacheList.clear();
+
+        if (!LoadLevel(nMap))
+        {
+            PS3_Log("[vramtest] %s: didn't load", name);
+            continue;
+        }
+
+        maps++;
+        shortMaps += polymost_ps3_vramMeasure(name, ps3_cacheList.data(), (int)ps3_cacheList.size());
+        ps3_cacheList.clear();
+    }
+
+    PS3_Log("[vramtest] done: %d maps, %d with textures that didn't fit; back to the XMB", maps, shortMaps);
+    PS3_GameQuit();
+    PS3_Exit(0);
+}
+#endif
+
 int app_main(int argc, char const* const* argv)
 {
     char buffer[BMAX_PATH];
@@ -2332,6 +2392,11 @@ int app_main(int argc, char const* const* argv)
     if (bSerialPlay && !InitSerial()) {
         bail2dos("Unable to connect");
     }
+
+#ifdef __PPU__
+    if (ps3_autotest)
+        PS3_VramTest();
+#endif
 
     if (doTitle)
     {

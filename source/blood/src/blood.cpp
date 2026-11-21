@@ -2022,12 +2022,11 @@ int app_main(int argc, char const * const * argv)
 
     OSD_Exec("autoexec.cfg");
 
+    if (!bQuickStart
 #ifdef __PPU__
-    if (ps3_autotest)
-        PS3_VramTest();
+        && !ps3_autotest
 #endif
-
-    if (!bQuickStart)
+        )
         credLogosDos();
     scrSetDac();
 RESTART:
@@ -2037,6 +2036,12 @@ RESTART:
     netBroadcastPlayerInfo(myconnectindex);
     LOG_F(INFO, "Waiting for network players!");
     netWaitForEveryone(0);
+#ifdef __PPU__
+    // the video memory test: here, with the local player (gMe) set up
+    // (patch 44 started it before: StartLevel died on gMe, NULL)
+    if (ps3_autotest)
+        PS3_VramTest();
+#endif
     if (gRestartGame)
     {
         // Network error
