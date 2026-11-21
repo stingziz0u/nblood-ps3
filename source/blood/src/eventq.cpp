@@ -38,6 +38,22 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "nnexts.h"
 #endif
 
+#ifdef __PPU__
+// NBlood-PS3: how many queued events each object (type, index) has, so an
+// evKill on an object with none skips the walk over the whole queue. On
+// the PPU that walk (a std::multiset, a std::function call per event) is
+// slow, and a lightning strike in E4M1 switches many sectors at once:
+// each SetSectorState walks the queue, ~300 ms in all. Kept out of the
+// EventQueue object, which the saves write as raw bytes.
+static uint32_t gEvCount[8][16384];
+static unsigned gEvKills, gEvKillsSkipped;
+
+static inline uint32_t *EvCount(int nIndex, int nType)
+{
+    return (unsigned)nIndex < 16384 && (unsigned)nType < 8 ? &gEvCount[nType][nIndex] : NULL;
+}
+#endif
+
 class EventQueue
 {
 public:
@@ -52,7 +68,29 @@ public:
     }
     EVENT ERemove(void)
     {
+#ifdef __PPU__
+        EVENT const event = PQueue->Remove();
+        if (uint32_t *pCount = EvCount(event.index, event.type))
+            if (*pCount) --*pCount;
+        return event;
+#else
         return PQueue->Remove();
+#endif
+    }
+    void Insert(uint32_t nTime, EVENT const &event)
+    {
+#ifdef __PPU__
+        if (uint32_t *pCount = EvCount(event.index, event.type))
+            ++*pCount;
+#endif
+        PQueue->Insert(nTime, event);
+    }
+    void Clear(void)
+    {
+#ifdef __PPU__
+        memset(gEvCount, 0, sizeof(gEvCount));
+#endif
+        PQueue->Clear();
     }
     void Kill(int, int);
     void Kill(int idx, int type, int causer);
@@ -60,19 +98,35 @@ public:
 };
 
 EventQueue eventQ;
+#ifdef __PPU__
+// all three Kills match on (index, type): none queued for it, nothing to
+// walk; otherwise the walk takes the killed ones off the count
+# define EV_KILL(a1, a2, match) do { \
+        uint32_t *const pCount = EvCount(a1, a2); \
+        gEvKills++; \
+        if (pCount && !*pCount) { gEvKillsSkipped++; break; } \
+        PQueue->Kill([&](const EVENT &nItem)->bool { \
+            bool const bKill = (match); \
+            if (bKill && pCount && *pCount) --*pCount; \
+            return bKill; }); \
+    } while (0)
+#else
+# define EV_KILL(a1, a2, match) PQueue->Kill([=](const EVENT &nItem)->bool { return (match); })
+#endif
+
 void EventQueue::Kill(int a1, int a2)
 {
-    PQueue->Kill([=](const EVENT &nItem)->bool {return (nItem.index == a1 && nItem.type == a2); });
+    EV_KILL(a1, a2, nItem.index == a1 && nItem.type == a2);
 }
 
 void EventQueue::Kill(int idx, int type, int causer)
 {
-    PQueue->Kill([=](const EVENT &nItem)->bool { return (nItem.index == idx && nItem.type == type && nItem.causer == causer); });
+    EV_KILL(idx, type, nItem.index == idx && nItem.type == type && nItem.causer == causer);
 }
 
 void EventQueue::Kill(int a1, int a2, CALLBACK_ID a3)
 {
-    PQueue->Kill([=](const EVENT &nItem)->bool {return (nItem.index == a1 && nItem.type == a2 && nItem.cmd == kCmdCallback && nItem.funcID == (unsigned int)a3); });
+    EV_KILL(a1, a2, nItem.index == a1 && nItem.type == a2 && nItem.cmd == kCmdCallback && nItem.funcID == (unsigned int)a3);
 }
 
 RXBUCKET rxBucket[kChannelMax+1];
@@ -268,7 +322,7 @@ void evInit(void)
         eventQ.PQueue = new VanillaPriorityQueue<EVENT>();
     else
         eventQ.PQueue = new StdPriorityQueue<EVENT>();
-    eventQ.PQueue->Clear();
+    eventQ.Clear();
     int nCount = 0;
     for (int i = 0; i < numsectors; i++)
     {
@@ -538,7 +592,7 @@ void evPost(int nIndex, int nType, unsigned int nDelta, COMMAND_ID command, int 
         evn.causer = kCauserGame;
     #endif
 
-    eventQ.PQueue->Insert((int)gFrameClock+nDelta, evn);
+    eventQ.Insert((int)gFrameClock+nDelta, evn);
 }
 
 void evPost(int nIndex, int nType, unsigned int nDelta, CALLBACK_ID callback) {
@@ -548,8 +602,12 @@ void evPost(int nIndex, int nType, unsigned int nDelta, CALLBACK_ID callback) {
     evn.cmd = kCmdCallback;
     evn.funcID = callback;
     evn.causer = kCauserGame;
-    eventQ.PQueue->Insert((int)gFrameClock+nDelta, evn);
+    eventQ.Insert((int)gFrameClock+nDelta, evn);
 }
+
+#ifdef __PPU__
+extern "C" void PS3_Log(const char *fmt, ...);
+#endif
 
 void evProcess(unsigned int nTime)
 {
@@ -568,6 +626,10 @@ void evProcess(unsigned int nTime)
     while(eventQ.IsNotEmpty(nTime))
     {
         EVENT event = eventQ.ERemove();
+#ifdef __PPU__
+        unsigned long long const ps3T0 = PS3_ProfClock();
+        unsigned const ps3Kills0 = gEvKills, ps3Skipped0 = gEvKillsSkipped;
+#endif
         if (event.cmd == kCmdCallback)
         {
             dassert(event.funcID < kCallbackMax);
@@ -589,6 +651,14 @@ void evProcess(unsigned int nTime)
                 break;
             }
         }
+#ifdef __PPU__
+        // still slow: the log says which one
+        double const ps3Ms = PS3_ProfClockMs(PS3_ProfClock() - ps3T0);
+        if (ps3Ms > 20.0)
+            PS3_Log("[slow event] %.1f ms: cmd %d type %d index %d callback %d; %u kills (%u with nothing queued), %u events queued",
+                    ps3Ms, (int)event.cmd, (int)event.type, (int)event.index, (int)event.funcID,
+                    gEvKills - ps3Kills0, gEvKillsSkipped - ps3Skipped0, (unsigned)eventQ.PQueue->Size());
+#endif
     }
 }
 
@@ -628,6 +698,7 @@ void EventQLoadSave::Load()
         eventQ.PQueue = new VanillaPriorityQueue<EVENT>();
     else
         eventQ.PQueue = new StdPriorityQueue<EVENT>();
+    eventQ.Clear();
     int nEvents;
     Read(&nEvents, sizeof(nEvents));
     for (int i = 0; i < nEvents; i++)
@@ -636,7 +707,7 @@ void EventQLoadSave::Load()
         unsigned int eventtime;
         Read(&eventtime, sizeof(eventtime));
         Read(&event, sizeof(event));
-        eventQ.PQueue->Insert(eventtime, event);
+        eventQ.Insert(eventtime, event);
     }
     Read(rxBucket, sizeof(rxBucket));
     Read(bucketHead, sizeof(bucketHead));
@@ -666,7 +737,7 @@ void EventQLoadSave::Save()
     dassert(eventQ.PQueue->Size() == 0);
     for (uint32_t i = 0; i < nEvents; i++)
     {
-        eventQ.PQueue->Insert(events[i].evTime, events[i].event);
+        eventQ.Insert(events[i].evTime, events[i].event);
     }
     Write(rxBucket, sizeof(rxBucket));
     Write(bucketHead, sizeof(bucketHead));

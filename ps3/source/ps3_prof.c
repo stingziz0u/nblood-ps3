@@ -80,6 +80,8 @@ static char const *const names[PS3P_COUNT] =
     "tiles", "disk", "tex", "upload", "audio lock", "rsx sync", "flip"
 };
 
+static double Ms(u64 ticks);
+
 static inline u64 NO_TRACE
 Ticks(void)
 {
@@ -109,6 +111,19 @@ PS3_ProfEnd(int id)
 
     if (--depth[id] == 0)
         cur.t[id] += Ticks() - start[id];
+}
+
+/* a timestamp and its length in ms, for the games' own one-off checks */
+unsigned long long NO_TRACE
+PS3_ProfClock(void)
+{
+    return Ticks();
+}
+
+double NO_TRACE
+PS3_ProfClockMs(unsigned long long ticks)
+{
+    return tb_freq ? Ms(ticks) : 0.0;
 }
 
 void NO_TRACE
