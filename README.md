@@ -9,10 +9,10 @@ own XMB entry.
 
 | Game | Package | XMB name | APPID |
 |---|---|---|---|
-| Blood, Cryptic Passage | `nblood-ps3-1.0.pkg` | NBlood | `NBLOODPS3` |
-| Redneck Rampage, Suckin' Grits on Route 66 | `redneck-ps3-1.0.pkg` | Redneck Rampage | `REDNECKRM` |
-| Redneck Rampage Rides Again | `redneckridesagain-ps3-1.0.pkg` | Redneck Rampage Rides Again | `REDNECKRA` |
-| PowerSlave | `ps3xhumed-1.0.pkg` | PowerSlave Exhumed | `PS3XHUMED` |
+| Blood, Cryptic Passage | `nblood-ps3-1.1.pkg` | NBlood | `NBLOODPS3` |
+| Redneck Rampage, Suckin' Grits on Route 66 | `redneck-ps3-1.1.pkg` | Redneck Rampage | `REDNECKRM` |
+| Redneck Rampage Rides Again | `redneckridesagain-ps3-1.1.pkg` | Redneck Rampage Rides Again | `REDNECKRA` |
+| PowerSlave | `ps3xhumed-1.1.pkg` | PowerSlave Exhumed | `PS3XHUMED` |
 
 ## Lineage
 
@@ -44,8 +44,10 @@ What every game here has:
   the frame rate limit (60 or 30 fps), an FPS display, widescreen, the
   **Texture Filter** (from sharp to trilinear) and a **TV screen fit**
   (70-100 %) that shrinks the picture for TVs that cut its edges
-  (overscan). The filters take much more video memory: if it runs out,
-  the filter is turned off by itself and the game says so.
+  (overscan). With a filter on, the textures are kept at 16 bits a texel
+  and the unused indexed ones are freed, so every map of the four games
+  fits in the video memory (checked map by map with the autotest); if a
+  texture still doesn't fit, the ones not drawn for a while make room.
 - **Audio**: 48000 Hz on the PS3's audio port. Volumes in steps of 5.
 - **Input**: DualShock 3 for movement, look and every action, all
   rebindable from the in-game menus, the sticks too (scale, dead zone,
@@ -95,7 +97,7 @@ User maps and mods should work the same way, but haven't been tested.
 
 ### Installation
 
-Install `nblood-ps3-1.0.pkg` from the XMB (shows up as "NBlood"). This
+Install `nblood-ps3-1.1.pkg` from the XMB (shows up as "NBlood"). This
 creates `/dev_hdd0/game/NBLOODPS3/USRDIR/` with an empty `addons/` folder
 and NBlood's own `nblood.pk3`. By FTP, place the files of your Blood 1.21
 there:
@@ -176,8 +178,8 @@ their cutscenes, saving and loading, the CD music.
 
 ### Installation
 
-Install `redneck-ps3-1.0.pkg` (shows up as "Redneck Rampage") and/or
-`redneckridesagain-ps3-1.0.pkg` ("Redneck Rampage Rides Again") from the XMB. They
+Install `redneck-ps3-1.1.pkg` (shows up as "Redneck Rampage") and/or
+`redneckridesagain-ps3-1.1.pkg` ("Redneck Rampage Rides Again") from the XMB. They
 create `/dev_hdd0/game/REDNECKRM/USRDIR/` and
 `/dev_hdd0/game/REDNECKRA/USRDIR/`, with empty `addons/` and `music/`
 folders (and for Redneck Rampage, `addons/route66/ROUTE66/`). By FTP,
@@ -256,7 +258,7 @@ name and should work the same way, but hasn't been tested.
 
 ### Installation
 
-Install `ps3xhumed-1.0.pkg` from the XMB (shows up as "PowerSlave
+Install `ps3xhumed-1.1.pkg` from the XMB (shows up as "PowerSlave
 Exhumed"). This creates `/dev_hdd0/game/PS3XHUMED/USRDIR/` with empty
 `addons/` and `music/` folders. By FTP:
 
@@ -312,14 +314,14 @@ Everything except Start is rebindable from OPTIONS -> Control Setup.
    ```bash
    git clone https://github.com/stingziz0u/nblood-ps3.git
    cd nblood-ps3
-   make -C ps3 -j$(nproc)                  # -> ps3/nblood-ps3-1.0.pkg
-   make -C ps3 GAME=rr -j$(nproc)          # -> ps3/redneck-ps3-1.0.pkg
-   make -C ps3 GAME=rrra -j$(nproc)        # -> ps3/redneckridesagain-ps3-1.0.pkg
-   make -C ps3 GAME=exhumed -j$(nproc)     # -> ps3/ps3xhumed-1.0.pkg
+   make -C ps3 -j$(nproc)                  # -> ps3/nblood-ps3-1.1.pkg
+   make -C ps3 GAME=rr -j$(nproc)          # -> ps3/redneck-ps3-1.1.pkg
+   make -C ps3 GAME=rrra -j$(nproc)        # -> ps3/redneckridesagain-ps3-1.1.pkg
+   make -C ps3 GAME=exhumed -j$(nproc)     # -> ps3/ps3xhumed-1.1.pkg
    ```
 
 Each game builds in its own folders, so they don't get in each other's
-way. `DEBUG=1` builds a testing package instead (`<name>-debug-1.0.pkg`,
+way. `DEBUG=1` builds a testing package instead (`<name>-debug-1.1.pkg`,
 "(debug)" on the XMB): always immortal, every weapon with ammo that
 doesn't run out, all the keys, and L3 + R3 together ends the level. It
 installs over the game and uses its data; installing the normal package
@@ -354,18 +356,26 @@ the vibration).
 The release build writes nothing to the HDD but your saves and settings.
 For troubleshooting, put a file named `logs.txt` (any content, even empty)
 in the game's `USRDIR`: the next start writes the PS3 layer's log there
-(`nblood-ps3.log`, `redneck-ps3.log`, `redneckridesagain-ps3.log` or
+(`nblood-ps3.log`, `redneck-ps3.log`, `redneckra-ps3.log` or
 `ps3xhumed.log`, with fps and memory figures every 10 seconds, the
 previous run kept as `.old.log`) and the engine's own log next to it.
 Delete `logs.txt` to turn them off again.
+
+### Video memory test
+
+With `logs.txt` and a file named `autotest.txt` in the game's `USRDIR`,
+the game doesn't open its menu: it loads every map of every episode in
+turn with the texture filter on (trilinear, the most memory), makes into
+textures everything each map caches, writes a `[vramtest]` line per map to
+the log (what it takes, what didn't fit, what the RSX has left) and goes
+back to the XMB. Your texture filter setting is left as it was. Delete
+`autotest.txt` to play again.
 
 ## Known limitations
 
 - No multiplayer.
 - DualShock 3 only: no USB keyboard or mouse.
 - No in-game console (it needs a keyboard).
-- Redneck Rampage's art is big: with a texture filter on, the video
-  memory can run out, and the filter is turned off.
 
 ## Credits
 
