@@ -11,7 +11,7 @@ own XMB entry.
 |---|---|---|---|
 | Blood, Cryptic Passage | `nblood-ps3-1.0.pkg` | NBlood | `NBLOODPS3` |
 | Redneck Rampage, Suckin' Grits on Route 66 | `redneck-ps3-1.0.pkg` | Redneck Rampage | `REDNECKRM` |
-| Redneck Rampage Rides Again | `redneckra-ps3-1.0.pkg` | Redneck Rampage Rides Again | `REDNECKRA` |
+| Redneck Rampage Rides Again | `redneckridesagain-ps3-1.0.pkg` | Redneck Rampage Rides Again | `REDNECKRA` |
 | PowerSlave | `ps3xhumed-1.0.pkg` | PowerSlave Exhumed | `PS3XHUMED` |
 
 ## Lineage
@@ -177,7 +177,7 @@ their cutscenes, saving and loading, the CD music.
 ### Installation
 
 Install `redneck-ps3-1.0.pkg` (shows up as "Redneck Rampage") and/or
-`redneckra-ps3-1.0.pkg` ("Redneck Rampage Rides Again") from the XMB. They
+`redneckridesagain-ps3-1.0.pkg` ("Redneck Rampage Rides Again") from the XMB. They
 create `/dev_hdd0/game/REDNECKRM/USRDIR/` and
 `/dev_hdd0/game/REDNECKRA/USRDIR/`, with empty `addons/` and `music/`
 folders (and for Redneck Rampage, `addons/route66/ROUTE66/`). By FTP,
@@ -314,7 +314,7 @@ Everything except Start is rebindable from OPTIONS -> Control Setup.
    cd nblood-ps3
    make -C ps3 -j$(nproc)                  # -> ps3/nblood-ps3-1.0.pkg
    make -C ps3 GAME=rr -j$(nproc)          # -> ps3/redneck-ps3-1.0.pkg
-   make -C ps3 GAME=rrra -j$(nproc)        # -> ps3/redneckra-ps3-1.0.pkg
+   make -C ps3 GAME=rrra -j$(nproc)        # -> ps3/redneckridesagain-ps3-1.0.pkg
    make -C ps3 GAME=exhumed -j$(nproc)     # -> ps3/ps3xhumed-1.0.pkg
    ```
 
@@ -354,7 +354,7 @@ the vibration).
 The release build writes nothing to the HDD but your saves and settings.
 For troubleshooting, put a file named `logs.txt` (any content, even empty)
 in the game's `USRDIR`: the next start writes the PS3 layer's log there
-(`nblood-ps3.log`, `redneck-ps3.log`, `redneckra-ps3.log` or
+(`nblood-ps3.log`, `redneck-ps3.log`, `redneckridesagain-ps3.log` or
 `ps3xhumed.log`, with fps and memory figures every 10 seconds, the
 previous run kept as `.old.log`) and the engine's own log next to it.
 Delete `logs.txt` to turn them off again.
