@@ -72,6 +72,49 @@ TexelBytes(const ps3gl_texture_t *t)
 	return t->bpp ? t->bpp : 4;
 }
 
+/* NBlood-PS3 (patch 44): RGBA textures the caller marks are kept as 16
+   bits a texel, A1R5G5B5 (Polymost's art tiles with a texture filter on:
+   256 colours and an alpha of 0 or 255, half the video memory). */
+static int pack16;
+
+void
+PS3GL_SetPack16(int on)
+{
+	pack16 = on != 0;
+}
+
+static inline uint16_t
+ToA1R5G5B5(uint32_t argb)
+{
+	return (uint16_t)(((argb >> 31) << 15) | ((argb >> 9) & 0x7c00) |
+		((argb >> 6) & 0x03e0) | ((argb >> 3) & 0x001f));
+}
+
+/* When a texture doesn't fit: the owner frees textures not drawn for
+   min_age frames (never 'bound', the one being made) and says how many;
+   ps3gl tries again. Polymost's (polymost_ps3_evict). */
+static int (*evict_hook)(int min_age, int bound);
+static unsigned evicted_total;
+
+void
+PS3GL_SetEvictHook(int (*hook)(int min_age, int bound))
+{
+	evict_hook = hook;
+}
+
+/* Frames since a texture was made or drawn (huge for no texture) */
+int
+PS3GL_TextureAge(unsigned name)
+{
+	const ps3gl_texture_t *t;
+
+	if (!ps3gl.textures || name == 0 || name >= PS3GL_MAX_TEXTURES)
+		return 1 << 30;
+
+	t = &ps3gl.textures[name];
+	return t->data ? (int)(ps3gl.frame - t->used_frame) : 1 << 30;
+}
+
 /* conversion buffer, grown on demand */
 static uint32_t *scratch;
 static size_t scratch_size;
@@ -370,7 +413,8 @@ static void
 BuildDescriptor(ps3gl_texture_t *t)
 {
 	memset(&t->gt, 0, sizeof(t->gt));
-	t->gt.format = (TexelBytes(t) == 1 ? GCM_TEXTURE_FORMAT_B8 : GCM_TEXTURE_FORMAT_A8R8G8B8) |
+	t->gt.format = (TexelBytes(t) == 1 ? GCM_TEXTURE_FORMAT_B8 :
+			TexelBytes(t) == 2 ? GCM_TEXTURE_FORMAT_A1R5G5B5 : GCM_TEXTURE_FORMAT_A8R8G8B8) |
 		(t->swizzled ? GCM_TEXTURE_FORMAT_SWZ : GCM_TEXTURE_FORMAT_LIN);
 	t->gt.mipmap = t->num_levels ? t->num_levels : 1;
 	t->gt.dimension = GCM_TEXTURE_DIMS_2D;
@@ -501,6 +545,7 @@ ps3gl_texel(const ps3gl_texture_t *t, int x, int y)
 	if (!t->swizzled)
 	{
 		return TexelBytes(t) == 1 ? t->data[(size_t)y * t->pitch + x] :
+			TexelBytes(t) == 2 ? (unsigned)(t->data[(size_t)y * t->pitch + (size_t)x * 2] & 0x7c) << 1 :
 			t->data[(size_t)y * t->pitch + (size_t)x * 4 + 1];
 	}
 
@@ -513,7 +558,9 @@ ps3gl_texel(const ps3gl_texture_t *t, int x, int y)
 		if (lh) { off |= (uint32_t)(y & 1) << bit; y >>= 1; bit++; lh--; }
 	}
 
-	return TexelBytes(t) == 1 ? t->data[off] : t->data[(size_t)off * 4 + 1];
+	return TexelBytes(t) == 1 ? t->data[off] :
+		TexelBytes(t) == 2 ? (unsigned)(t->data[(size_t)off * 2] & 0x7c) << 1 :
+		t->data[(size_t)off * 4 + 1];
 }
 
 GLboolean APIENTRY
@@ -668,6 +715,84 @@ Upload8(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
 	ps3gl.tex_written = 1;
 }
 
+/* Upload for A1R5G5B5 textures (two bytes a texel), as Upload below */
+static void
+Upload16(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
+		GLenum format, const uint8_t *src, int row_pixels, int lw, int lh)
+{
+	int bytes = FormatBytes(format);
+	int i, j;
+
+	if (t->swizzled)
+	{
+		uint16_t *dst = (uint16_t *)(t->data + LevelOffset(t->width, t->height, level, 2));
+
+		if (!SwizzleFor(lw, lh))
+		{
+			return;
+		}
+
+		if (x == 0 && y == 0 && w == lw && h == lh)
+		{
+			uint16_t *pix = (uint16_t *)Scratch((size_t)w * h * 2);
+
+			if (!pix)
+			{
+				return;
+			}
+
+			for (j = 0; j < h; j++)
+			{
+				const uint8_t *s = src + (size_t)j * row_pixels * bytes;
+
+				for (i = 0; i < w; i++, s += bytes)
+				{
+					pix[swz_tx[i] | swz_ty[j]] = ToA1R5G5B5(ToARGB(s, bytes, format));
+				}
+			}
+
+			memcpy(dst, pix, (size_t)w * h * 2);
+		}
+		else
+		{
+			for (j = 0; j < h; j++)
+			{
+				const uint8_t *s = src + (size_t)j * row_pixels * bytes;
+				uint32_t oy = swz_ty[y + j];
+
+				for (i = 0; i < w; i++, s += bytes)
+				{
+					dst[swz_tx[x + i] | oy] = ToA1R5G5B5(ToARGB(s, bytes, format));
+				}
+			}
+		}
+	}
+	else
+	{
+		uint16_t *row = (uint16_t *)Scratch((size_t)w * 2);
+
+		if (!row)
+		{
+			return;
+		}
+
+		for (j = 0; j < h; j++)
+		{
+			const uint8_t *s = src + (size_t)j * row_pixels * bytes;
+
+			for (i = 0; i < w; i++, s += bytes)
+			{
+				row[i] = ToA1R5G5B5(ToARGB(s, bytes, format));
+			}
+
+			memcpy(t->data + (size_t)(y + j) * t->pitch + (size_t)x * 2, row, (size_t)w * 2);
+		}
+	}
+
+	ps3gl.st_upload += (uint32_t)w * h * 2;
+	ps3gl.tex_written = 1;
+}
+
 static void
 Upload(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
 		GLenum format, const uint8_t *src)
@@ -685,6 +810,12 @@ Upload(ps3gl_texture_t *t, int level, int x, int y, int w, int h,
 	if (TexelBytes(t) == 1)
 	{
 		Upload8(t, level, x, y, w, h, format, src, row_pixels, lw, lh);
+		return;
+	}
+
+	if (TexelBytes(t) == 2)
+	{
+		Upload16(t, level, x, y, w, h, format, src, row_pixels, lw, lh);
 		return;
 	}
 
@@ -807,7 +938,7 @@ TexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 		int bpp = ((format == GL_RED || format == GL_LUMINANCE) &&
 				   (internalFormat == GL_RED || internalFormat == GL_LUMINANCE ||
 					internalFormat == PS3GL_R8 || internalFormat == PS3GL_LUMINANCE8 ||
-					internalFormat == 1)) ? 1 : 4;
+					internalFormat == 1)) ? 1 : pack16 ? 2 : 4;
 		uint32_t pitch;
 		uint32_t size;
 
@@ -829,6 +960,28 @@ TexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 			ReleaseStorage(t);
 
 			t->data = (uint8_t *)ps3gl_rsx_memalign(128, size);
+
+			/* full: the owner frees textures not drawn for a while (a
+			   long while first), and again */
+			if (!t->data && evict_hook)
+			{
+				static const int ages[] = { 600, 60, 3 };
+				int k, n;
+
+				for (k = 0; k < 3 && !t->data; k++)
+				{
+					n = evict_hook(ages[k], ps3gl.tmu[ps3gl.active_tmu].tex);
+
+					if (n > 0)
+					{
+						if (evicted_total == 0 || ((evicted_total + n) >> 10) != (evicted_total >> 10))
+							PS3_Log("[gl] RSX memory full: freed %d textures not drawn for %d frames (%u in all)",
+									n, ages[k], evicted_total + n);
+						evicted_total += n;
+						t->data = (uint8_t *)ps3gl_rsx_memalign(128, size);
+					}
+				}
+			}
 
 			if (!t->data)
 			{
@@ -852,6 +1005,7 @@ TexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 			rsxAddressToOffset(t->data, &t->offset);
 			t->size = size;
 			ps3gl.st_tex_bytes += size;
+			t->used_frame = ps3gl.frame;
 
 			if (!t->min_filter)
 			{
@@ -1214,6 +1368,7 @@ ps3gl_apply_textures(unsigned units)
 		}
 
 		t->last_frame = ps3gl.frame;
+		t->used_frame = ps3gl.frame;
 
 		if (tmu->hw_tex == tmu->tex && tmu->hw_enabled == 1 && !t->dirty)
 		{

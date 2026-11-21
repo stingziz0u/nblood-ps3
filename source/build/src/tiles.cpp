@@ -673,7 +673,13 @@ bool tileLoad(int16_t tileNum)
 
 #ifdef USE_OPENGL
     if (videoGetRenderMode() >= REND_POLYMOST &&
-        in3dmode())
+        in3dmode()
+#ifdef __PS3__
+        // NBlood-PS3: not into the indexed tilesheets with a texture filter
+        // on (polymost.cpp frees them then)
+        && polymost_useindexedtextures()
+#endif
+        )
     {
         //POGOTODO: this type stuff won't be necessary down the line -- review this
         int type;

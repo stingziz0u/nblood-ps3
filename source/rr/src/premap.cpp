@@ -27,9 +27,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "savegame.h"
 #include "cmdline.h"
 #ifdef __PPU__
-#include <algorithm>
 #include <vector>
-#include "texcache.h"
 #endif
 
 static int32_t g_whichPalForPlayer = 9;
@@ -736,62 +734,16 @@ void G_CacheMapData(void)
 }
 
 #ifdef __PPU__
-extern "C" {
-void PS3_Log(const char *fmt, ...);
-void PS3GL_TexStats(uint32_t *bytes, uint32_t *fails, uint32_t *fail_bytes, int reset);
-uint32_t PS3GL_ProbeFreeRSX(uint32_t *largest);
-}
 void polymost_ps3_dropRGBA(void);   // build/src/polymost.cpp
+int polymost_ps3_vramMeasure(char const *name, uint32_t *keys, int numKeys);
 
-// The video memory test, for the map just entered: what it caches made
-// into textures, as drawing it would (with the texture filter on: an RGBA
-// texture for each tile and palette, the sprites' clamped). What they
-// take, what didn't fit, what the RSX has left. 1: something didn't fit.
+// The video memory test, for the map just entered (polymost.cpp does the
+// measuring). 1: something didn't fit.
 int G_PS3_VramMeasure(char const *name)
 {
-    std::vector<uint32_t> &list = g_ps3CacheList;
-
-    std::sort(list.begin(), list.end());
-    list.erase(std::unique(list.begin(), list.end()), list.end());
-
-    uint32_t before, after, fails, failBytes, largest;
-    int tiles = 0, lastTile = -1, pals = 0;
-    uint8_t palSeen[256] = {};
-
-    PS3GL_TexStats(&before, NULL, NULL, 1);
-
-    for (uint32_t const key : list)
-    {
-        int const tile = key >> 9, pal = (key >> 1) & 255, type = key & 1;
-
-        if (tilesiz[tile].x <= 0 || tilesiz[tile].y <= 0 || (pal < MAXPALOOKUPS - RESERVEDPALS && palookup[pal] == NULL))
-            continue;
-
-        if (waloff[tile] == 0)
-            tileLoad((int16_t)tile);
-
-        texcache_fetch(tile, pal, 0, type ? (DAMETH_CLAMPED|DAMETH_MASK) : 0);
-
-        if (tile != lastTile)
-            tiles++, lastTile = tile;
-        if (!palSeen[pal])
-            palSeen[pal] = 1, pals++;
-    }
-
-    PS3GL_TexStats(&after, &fails, &failBytes, 1);
-
-    uint32_t const freeBytes = PS3GL_ProbeFreeRSX(&largest);
-
-    PS3_Log("[vramtest] %s: %d tiles in %d palettes, %d textures: %.1f MB (all textures %.1f MB); "
-            "RSX free %.1f MB (largest block %.1f MB); %s",
-            name, tiles, pals, (int)list.size(), (after - before) / 1048576.0, after / 1048576.0,
-            freeBytes / 1048576.0, largest / 1048576.0, fails ? "" : "everything fit");
-
-    if (fails)
-        PS3_Log("[vramtest]   SHORT: %u textures didn't fit, %.1f MB more needed", fails, failBytes / 1048576.0);
-
-    list.clear();
-    return fails != 0;
+    int const r = polymost_ps3_vramMeasure(name, g_ps3CacheList.data(), (int)g_ps3CacheList.size());
+    g_ps3CacheList.clear();
+    return r;
 }
 #endif
 

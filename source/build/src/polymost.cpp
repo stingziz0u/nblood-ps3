@@ -20,6 +20,7 @@ Ken Silverman's official web site: http://www.advsys.net/ken
 #include "colmatch.h"
 #include "texcache.h"
 #include "hash.h"
+#include <algorithm>
 
 #ifdef POLYMOST2
 int32_t r_enablepolymost2 = 0;
@@ -536,6 +537,193 @@ void polymost_ps3_dropRGBA(void)
 
     OSD_Printf("PS3: %d RGBA textures freed (texture filter off)\n", dropped);
 }
+
+// NBlood-PS3 (patch 44): the video memory with a texture filter on.
+extern "C" {
+void PS3GL_SetPack16(int on);
+void PS3GL_SetEvictHook(int (*hook)(int min_age, int bound));
+int PS3GL_TextureAge(unsigned name);
+}
+extern int ps3_autotest;
+
+// 1. The indexed tilesheets (all of them, 4 MB each, made at startup: 88
+//    MB in Redneck Rampage, 140 in Rides Again) do nothing with a filter
+//    on: freed when the first RGBA texture is made, made again when an
+//    indexed one is wanted (the filter off again).
+static int ps3NumTilesheets, ps3SheetsGone;
+
+static void polymost_ps3_dropIndexed(void)
+{
+    int dropped = 0;
+
+    for (bssize_t i = 0; i < GLTEXCACHEADSIZ; i++)
+    {
+        pthtyp **pp = &texcache.list[i];
+
+        while (*pp)
+        {
+            pthtyp *const pth = *pp;
+
+            if (!(pth->flags & PTH_INDEXED))
+            {
+                pp = &pth->next;
+                continue;
+            }
+
+            *pp = pth->next;
+
+            // a tile of its own (too big for a sheet) has its own texture
+            bool inSheet = false;
+            for (int s = 0; s < ps3NumTilesheets; s++)
+                inSheet |= pth->glpic == tilesheetTexIDs[s];
+            if (!inSheet && pth->glpic)
+                glDeleteTextures(1, &pth->glpic);
+
+            Xfree(pth);
+            dropped++;
+        }
+    }
+
+    for (int s = 0; s < ps3NumTilesheets; s++)
+        if (tilesheetTexIDs[s])
+        {
+            glDeleteTextures(1, &tilesheetTexIDs[s]);
+            tilesheetTexIDs[s] = 0;
+        }
+
+    ps3SheetsGone = 1;
+    OSD_Printf("PS3: texture filter on, %d indexed tilesheets freed (%d tiles)\n", ps3NumTilesheets, dropped);
+}
+
+static void polymost_ps3_restoreIndexed(void)
+{
+    vec2_t const maxTexDimensions = { tilesheetSize, tilesheetSize };
+
+    for (int i = 0; i < ps3NumTilesheets; ++i)
+    {
+        if (glIsTexture(tilesheetTexIDs[i])) continue;
+        glGenTextures(1, tilesheetTexIDs+i);
+        buildgl_bindTexture(GL_TEXTURE_2D, tilesheetTexIDs[i]);
+        uploadtextureindexed(true, {0, 0}, maxTexDimensions, (intptr_t) NULL);
+    }
+
+    const char blankTex[] = {255, 255, 255, 255};
+    Tile blankTile;
+    tilepacker_getTile(0, &blankTile);
+    buildgl_bindTexture(GL_TEXTURE_2D, tilesheetTexIDs[blankTile.tilesheetID]);
+    uploadtextureindexed(false, {(int32_t) blankTile.rect.u, (int32_t) blankTile.rect.v}, {2, 2}, (intptr_t) blankTex);
+
+    ps3SheetsGone = 0;
+    OSD_Printf("PS3: texture filter off, %d indexed tilesheets made again\n", ps3NumTilesheets);
+}
+
+// 3. A texture that doesn't fit: the RGBA ones not drawn for min_age
+//    frames go (made again when drawn), never 'bound', the one being made
+//    (or the tile whose fullbright layer is). Not in the video memory
+//    test, which counts what doesn't fit.
+static int polymost_ps3_evict(int minAge, int bound)
+{
+    if (ps3_autotest)
+        return 0;
+
+    int freed = 0;
+
+    for (bssize_t i = 0; i < GLTEXCACHEADSIZ; i++)
+    {
+        pthtyp **pp = &texcache.list[i];
+
+        while (*pp)
+        {
+            pthtyp *const pth = *pp;
+            bool const hasFB = (pth->flags & PTH_HASFULLBRIGHT) && pth->ofb;
+
+            if ((pth->flags & PTH_INDEXED) || (int)pth->glpic == bound || (hasFB && (int)pth->ofb->glpic == bound))
+            {
+                pp = &pth->next;
+                continue;
+            }
+
+            int age = PS3GL_TextureAge(pth->glpic);
+            if (hasFB)
+                age = min(age, PS3GL_TextureAge(pth->ofb->glpic));
+
+            if (age < minAge)
+            {
+                pp = &pth->next;
+                continue;
+            }
+
+            *pp = pth->next;
+
+            if (pth->flags & PTH_HASFULLBRIGHT)
+            {
+                glDeleteTextures(1, &pth->ofb->glpic);
+                Xfree(pth->ofb);
+            }
+
+            glDeleteTextures(1, &pth->glpic);
+            Xfree(pth);
+            freed++;
+        }
+    }
+
+    return freed;
+}
+
+// The video memory test (USRDIR/autotest.txt; Redneck Rampage's game.cpp,
+// Blood's blood.cpp): what a map caches, keys of tile << 9 | palette << 1
+// | sprite, made into textures as drawing it would. What they take, what
+// didn't fit, what the RSX has left. 1: something didn't fit.
+extern "C" {
+void PS3_Log(const char *fmt, ...);
+void PS3GL_TexStats(uint32_t *bytes, uint32_t *fails, uint32_t *fail_bytes, int reset);
+uint32_t PS3GL_ProbeFreeRSX(uint32_t *largest);
+}
+
+int polymost_ps3_vramMeasure(char const *name, uint32_t *keys, int numKeys)
+{
+    std::sort(keys, keys + numKeys);
+    numKeys = int(std::unique(keys, keys + numKeys) - keys);
+
+    uint32_t before, after, fails, failBytes, largest;
+    int tiles = 0, lastTile = -1, pals = 0;
+    uint8_t palSeen[256] = {};
+
+    PS3GL_TexStats(&before, NULL, NULL, 1);
+
+    for (int i = 0; i < numKeys; i++)
+    {
+        int const tile = keys[i] >> 9, pal = (keys[i] >> 1) & 255, type = keys[i] & 1;
+
+        if ((unsigned)tile >= MAXTILES || tilesiz[tile].x <= 0 || tilesiz[tile].y <= 0 ||
+            (pal < MAXPALOOKUPS - RESERVEDPALS && palookup[pal] == NULL))
+            continue;
+
+        if (waloff[tile] == 0)
+            tileLoad((int16_t)tile);
+
+        texcache_fetch(tile, pal, 0, type ? (DAMETH_CLAMPED|DAMETH_MASK) : 0);
+
+        if (tile != lastTile)
+            tiles++, lastTile = tile;
+        if (!palSeen[pal])
+            palSeen[pal] = 1, pals++;
+    }
+
+    PS3GL_TexStats(&after, &fails, &failBytes, 1);
+
+    uint32_t const freeBytes = PS3GL_ProbeFreeRSX(&largest);
+
+    PS3_Log("[vramtest] %s: %d tiles in %d palettes, %d textures: %.1f MB (all textures %.1f MB, indexed tilesheets %s); "
+            "RSX free %.1f MB (largest block %.1f MB); %s",
+            name, tiles, pals, numKeys, (after - before) / 1048576.0, after / 1048576.0,
+            ps3SheetsGone ? "freed" : "kept", freeBytes / 1048576.0, largest / 1048576.0, fails ? "" : "everything fit");
+
+    if (fails)
+        PS3_Log("[vramtest]   SHORT: %u textures didn't fit, %.1f MB more needed", fails, failBytes / 1048576.0);
+
+    return fails != 0;
+}
 #endif
 
 void polymost_glreset()
@@ -1027,8 +1215,8 @@ void polymost_glinit()
         tilesheetSize = 8192;
 #endif
 #ifdef __PS3__
-    // ps3gl keeps textures as 32 bits per texel in the RSX's memory:
-    // 2048x2048 sheets (16 MB each) rather than 4096 ones (64 MB)
+    // 2048x2048 sheets (4 MB each, ps3gl keeps one channel textures as a
+    // byte a texel) rather than 4096 ones (16 MB)
     if (tilesheetSize > 2048)
         tilesheetSize = 2048;
 #endif
@@ -1058,6 +1246,11 @@ void polymost_glinit()
             ++numTilesheets;
         } while (!allPacked && numTilesheets < MAXTILESHEETS);
     }
+#ifdef __PS3__
+    ps3NumTilesheets = numTilesheets;
+    ps3SheetsGone = 0;
+    PS3GL_SetEvictHook(polymost_ps3_evict);
+#endif
     for (int i = 0; i < numTilesheets; ++i)
     {
         if (glIsTexture(tilesheetTexIDs[i])) continue;
@@ -2100,6 +2293,10 @@ void polymost_setuptexture(const int32_t dameth, int filter)
 
 static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, int32_t doalloc)
 {
+#ifdef __PS3__
+    if (ps3SheetsGone)
+        polymost_ps3_restoreIndexed();
+#endif
     vec2_16_t const & tsizart = tilesiz[dapic];
     vec2_t siz = { tsizart.x, tsizart.y };
     //POGOTODO: npoty
@@ -2180,6 +2377,11 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
     {
         return gloadtile_art_indexed(dapic, dameth, pth, doalloc);
     }
+
+#ifdef __PS3__
+    if (!ps3SheetsGone && ps3NumTilesheets && !polymost_useindexedtextures())
+        polymost_ps3_dropIndexed();
+#endif
 
     static int32_t fullbrightloadingpass = 0;
     vec2_16_t const & tsizart = tilesiz[dapic];
@@ -2342,12 +2544,19 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
                 doalloc = true;
             }
         }
+#ifdef __PS3__
+        // 2. 16 bits a texel (A1R5G5B5): half the video memory
+        PS3GL_SetPack16(1);
+#endif
         uploadtexture(doalloc, siz, GL_BGRA, pic, tsiz,
                       dameth | DAMETH_ARTIMMUNITY |
                       ((dapic >= MAXUSERTILES) * (DAMETH_NOTEXCOMPRESS|DAMETH_NODOWNSIZE)) | /* never process these short-lived tiles */
                       (hasfullbright * DAMETH_HASFULLBRIGHT) |
                       (npoty * DAMETH_NPOTWALL) |
                       (hasalpha * (DAMETH_HASALPHA|DAMETH_ONEBITALPHA)));
+#ifdef __PS3__
+        PS3GL_SetPack16(0);
+#endif
 
         Xfree(pic);
     }

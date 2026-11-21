@@ -141,9 +141,10 @@ typedef struct {
 	uint8_t     dirty;          /* descriptor or sampler state changed */
 	uint8_t     allocated;      /* name handed out by glGenTextures */
 	uint8_t     max_level;      /* GL_TEXTURE_MAX_LEVEL + 1, 0 = not set */
-	uint8_t     bpp;            /* bytes per texel: 1 (one channel, B8) or 4; 0 = 4 */
+	uint8_t     bpp;            /* bytes per texel: 1 (one channel, B8), 2 (A1R5G5B5) or 4; 0 = 4 */
 	GLenum      min_filter, mag_filter, wrap_s, wrap_t;
 	uint32_t    last_frame;     /* last frame that drew with it */
+	uint32_t    used_frame;     /* last frame that made or drew it (its age, for freeing) */
 	gcmTexture  gt;
 } ps3gl_texture_t;
 

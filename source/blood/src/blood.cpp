@@ -23,6 +23,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "build.h"
 #include "mmulti.h"
 #include "compat.h"
+#ifdef __PPU__
+#include <vector>
+#endif
 #include "renderlayer.h"
 #include "vfs.h"
 #include "fx_man.h"
@@ -344,9 +347,17 @@ void PrecacheThing(spritetype *pSprite) {
     tilePrecacheTile(pSprite->picnum);
 }
 
+#ifdef __PPU__
+extern int ps3_cachePal;   // tile.cpp: the video memory test's palette
+# define PS3_CACHEPAL(p) (ps3_cachePal = (p))
+#else
+# define PS3_CACHEPAL(p) ((void)0)
+#endif
+
 void PreloadTiles(void)
 {
     nPrecacheCount = 0;
+    PS3_CACHEPAL(0);
     int skyTile = -1;
     memset(gotpic,0,sizeof(gotpic));
     // Fonts
@@ -359,13 +370,16 @@ void PreloadTiles(void)
     }
     for (int i = 0; i < numsectors; i++)
     {
+        PS3_CACHEPAL(sector[i].floorpal);
         tilePrecacheTile(sector[i].floorpicnum, 0);
+        PS3_CACHEPAL(sector[i].ceilingpal);
         tilePrecacheTile(sector[i].ceilingpicnum, 0);
         if ((sector[i].ceilingstat&1) != 0 && skyTile == -1)
             skyTile = sector[i].ceilingpicnum;
     }
     for (int i = 0; i < numwalls; i++)
     {
+        PS3_CACHEPAL(wall[i].pal);
         tilePrecacheTile(wall[i].picnum, 0);
         if (wall[i].overpicnum >= 0)
             tilePrecacheTile(wall[i].overpicnum, 0);
@@ -375,6 +389,7 @@ void PreloadTiles(void)
         if (sprite[i].statnum < kMaxStatus)
         {
             spritetype *pSprite = &sprite[i];
+            PS3_CACHEPAL(pSprite->pal);
             switch (pSprite->statnum)
             {
             case kStatDude:
@@ -389,6 +404,8 @@ void PreloadTiles(void)
             }
         }
     }
+
+    PS3_CACHEPAL(0);
 
     // Precache common SEQs
     for (int i = 0; i < 100; i++)
@@ -608,6 +625,11 @@ int16_t startang, startsectnum;
 extern "C" void PS3_LogMemoryAt(const char *where);
 #endif
 
+#ifdef __PPU__
+extern int ps3_autotest;
+void polymost_ps3_dropRGBA(void);   // build/src/polymost.cpp
+#endif
+
 void StartLevel(GAMEOPTIONS *pOpt)
 {
 #ifdef __PPU__
@@ -636,7 +658,11 @@ void StartLevel(GAMEOPTIONS *pOpt)
 
         if ((pOpt->uGameFlags & kGameFlagPlayIntro) || (pOpt->uGameFlags & kGameFlagPlayScene))
         {
-            if (gDemo.at1 == 0 && !Bstrlen(pOpt->szUserMap))
+            if (gDemo.at1 == 0 && !Bstrlen(pOpt->szUserMap)
+#ifdef __PPU__
+                && !ps3_autotest   // the video memory test: no cutscenes
+#endif
+                )
                 levelPlayIntroScene(pOpt->nEpisode, pOpt->nLevel);
         }
 
@@ -816,6 +842,12 @@ void StartLevel(GAMEOPTIONS *pOpt)
     PS3_CRUMB("StartLevel", 8);
 #ifdef __PPU__
     PS3_LogMemoryAt("actors and players set up");
+#endif
+#ifdef __PPU__
+    // NBlood-PS3: with a texture filter on, a new map starts without the
+    // RGBA textures of the maps before (made again as they're drawn)
+    if (gltexfiltermode != 0)
+        polymost_ps3_dropRGBA();
 #endif
     PreloadCache();
     PS3_CRUMB("StartLevel", 9);
@@ -1655,6 +1687,60 @@ static int32_t check_filename_casing(void)
 }
 #endif
 
+#ifdef __PPU__
+// The video memory test (USRDIR/autotest.txt with logs.txt): every map of
+// every episode started in turn with the texture filter on (trilinear,
+// mipmaps: the most memory), what each caches made into textures
+// (polymost_ps3_vramMeasure), "[vramtest]" lines in the log, then back to
+// the XMB. A texture that doesn't fit is counted, nothing turns off.
+extern std::vector<uint32_t> ps3_cacheList;   // tile.cpp
+int polymost_ps3_vramMeasure(char const *name, uint32_t *keys, int numKeys);
+extern "C" void PS3_Log(const char *fmt, ...);
+extern "C" int PS3_ExitRequested(void);
+extern "C" void PS3_Exit(int code) __attribute__((noreturn));
+extern "C" void PS3_GameQuit(void);
+
+static void PS3_VramTest(void)
+{
+    int maps = 0, shortMaps = 0;
+
+    gltexfiltermode = 5;
+    gltexapplyprops();
+    PS3_Log("[vramtest] Blood: every map with texture filter 5 (trilinear)");
+
+    for (int e = 0; e < gEpisodeCount && !PS3_ExitRequested(); e++)
+        for (int l = 0; l < gEpisodeInfo[e].nLevels && !PS3_ExitRequested(); l++)
+        {
+            char name[96];
+            Bsnprintf(name, sizeof(name), "E%dM%d %s", e + 1, l + 1, gEpisodeInfo[e].levelsInfo[l].Filename);
+
+            gGameOptions.nGameType = kGameTypeSinglePlayer;
+            gGameOptions.nDifficulty = gGameOptions.nDifficultyQuantity = gGameOptions.nDifficultyHealth = 4;
+            gGameOptions.uGameFlags = 0;
+            gGameOptions.szUserMap[0] = 0;
+            levelSetupOptions(e, l);
+            ps3_cacheList.clear();
+            gQuitGame = false;
+            StartLevel(&gGameOptions);
+
+            if (gQuitGame)
+            {
+                PS3_Log("[vramtest] %s: didn't load", name);
+                gQuitGame = false;
+                continue;
+            }
+
+            maps++;
+            shortMaps += polymost_ps3_vramMeasure(name, ps3_cacheList.data(), (int)ps3_cacheList.size());
+            ps3_cacheList.clear();
+        }
+
+    PS3_Log("[vramtest] done: %d maps, %d with textures that didn't fit; back to the XMB", maps, shortMaps);
+    PS3_GameQuit();
+    PS3_Exit(0);
+}
+#endif
+
 int app_main(int argc, char const * const * argv)
 {
     char buffer[BMAX_PATH];
@@ -1935,6 +2021,11 @@ int app_main(int argc, char const * const * argv)
     InitVersionString();
 
     OSD_Exec("autoexec.cfg");
+
+#ifdef __PPU__
+    if (ps3_autotest)
+        PS3_VramTest();
+#endif
 
     if (!bQuickStart)
         credLogosDos();

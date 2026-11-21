@@ -6480,7 +6480,7 @@ static void G_PS3_VramTest(void)
             shortMaps += G_PS3_VramMeasure(name);
         }
 
-    PS3_Log("[vramtest] done: %d maps, %d with textures that didn't fit", maps, shortMaps);
+    PS3_Log("[vramtest] done: %d maps, %d with textures that didn't fit; back to the XMB", maps, shortMaps);
     PS3_GameQuit();
     PS3_Exit(0);
 }

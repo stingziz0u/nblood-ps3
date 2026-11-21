@@ -24,6 +24,6 @@ extern "C" void PS3_GameFilterOff(void)
     viewSetMessage("Not enough video memory: texture filter off");
 }
 
-// The autotest (USRDIR/autotest.txt) is EDuke32-PS3's: here the flag is
-// read and nothing more.
+// The autotest (USRDIR/autotest.txt, with logs.txt): the video memory
+// test, every map with the texture filter on (blood.cpp, PS3_VramTest).
 int ps3_autotest;

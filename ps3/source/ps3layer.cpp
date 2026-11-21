@@ -445,7 +445,11 @@ void PS3_Exit(int code)
 
     // Quit from the game's menu, or an error: back to the launcher (not
     // the XMB's "Quit Game"). Returns only if that can't be done.
-    if (!exit_requested && PS3_Launcher_Used())
+    // The autotest (autotest.txt) always ends in the XMB: the launcher
+    // would only start it again.
+    extern int ps3_autotest;
+
+    if (!exit_requested && !ps3_autotest && PS3_Launcher_Used())
         PS3_Launcher_Relaunch(last_error[0] ? last_error : nullptr);
 
     PS3_Log("[9] bye");

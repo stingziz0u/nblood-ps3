@@ -23,6 +23,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __PPU__
+#include <vector>
+#endif
 #include "compat.h"
 #include "build.h"
 #include "common.h"
@@ -224,6 +227,23 @@ void tilePreloadTile(int nTile)
 int nPrecacheCount;
 char precachehightile[2][bitmap_size(MAXTILES)];
 
+#ifdef __PPU__
+// NBlood-PS3: the video memory test (USRDIR/autotest.txt, blood.cpp's
+// PS3_VramTest): every tile a map caches, with the palette it's seen in
+// (PreloadTiles sets it: the floor's, ceiling's, wall's or sprite's)
+extern int ps3_autotest;
+int ps3_cachePal;
+std::vector<uint32_t> ps3_cacheList;   // tile << 9 | pal << 1 | sprite
+
+static inline void Ps3NoteTile(int nTile, int nType)
+{
+    if (ps3_autotest && (unsigned)nTile < kMaxTiles)
+        ps3_cacheList.push_back(((uint32_t)nTile << 9) | ((uint32_t)(ps3_cachePal & 255) << 1) | (nType ? 1 : 0));
+}
+#else
+# define Ps3NoteTile(nTile, nType) ((void)0)
+#endif
+
 void tilePrecacheTile(int nTile, int nType)
 {
     int n = 1;
@@ -259,6 +279,7 @@ void tilePrecacheTile(int nTile, int nType)
                     SetBitString(gotpic, tile);
                 }
                 SetBitString(precachehightile[nType], tile);
+                Ps3NoteTile(tile, nType);
             }
         }
         else
@@ -269,6 +290,7 @@ void tilePrecacheTile(int nTile, int nType)
                 SetBitString(gotpic, nTile);
             }
             SetBitString(precachehightile[nType], nTile);
+            Ps3NoteTile(nTile, nType);
         }
         nTile += 1+picanm[nTile].num;
     }
