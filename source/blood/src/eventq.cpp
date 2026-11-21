@@ -38,26 +38,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "nnexts.h"
 #endif
 
-#ifdef __PPU__
-// NBlood-PS3: how many queued events each object (type, index) has, so an
-// evKill on an object with none skips the walk over the whole queue. On
-// the PPU that walk (a std::multiset, a std::function call per event) is
-// slow, and a lightning strike in E4M1 switches many sectors at once:
-// each SetSectorState walks the queue, ~300 ms in all. Kept out of the
-// EventQueue object, which the saves write as raw bytes.
-static uint32_t gEvCount[8][16384];
-static unsigned gEvKills, gEvKillsSkipped;
-// for the slow frames' "[slow events]" lines: what the kills walked and
-// took, what evSend handed out
-static unsigned long long gEvKillWalked, gEvKillTicks;
-static unsigned gEvSends, gEvSendMsgs;
-
-static inline uint32_t *EvCount(int nIndex, int nType)
-{
-    return (unsigned)nIndex < 16384 && (unsigned)nType < 8 ? &gEvCount[nType][nIndex] : NULL;
-}
-#endif
-
 class EventQueue
 {
 public:
@@ -72,29 +52,7 @@ public:
     }
     EVENT ERemove(void)
     {
-#ifdef __PPU__
-        EVENT const event = PQueue->Remove();
-        if (uint32_t *pCount = EvCount(event.index, event.type))
-            if (*pCount) --*pCount;
-        return event;
-#else
         return PQueue->Remove();
-#endif
-    }
-    void Insert(uint32_t nTime, EVENT const &event)
-    {
-#ifdef __PPU__
-        if (uint32_t *pCount = EvCount(event.index, event.type))
-            ++*pCount;
-#endif
-        PQueue->Insert(nTime, event);
-    }
-    void Clear(void)
-    {
-#ifdef __PPU__
-        memset(gEvCount, 0, sizeof(gEvCount));
-#endif
-        PQueue->Clear();
     }
     void Kill(int, int);
     void Kill(int idx, int type, int causer);
@@ -103,37 +61,38 @@ public:
 
 EventQueue eventQ;
 #ifdef __PPU__
-// all three Kills match on (index, type): none queued for it, nothing to
-// walk; otherwise the walk takes the killed ones off the count
-# define EV_KILL(a1, a2, match) do { \
-        uint32_t *const pCount = EvCount(a1, a2); \
-        gEvKills++; \
-        if (pCount && !*pCount) { gEvKillsSkipped++; break; } \
-        unsigned long long const ps3K0 = PS3_ProfClock(); \
-        gEvKillWalked += PQueue->Size(); \
-        PQueue->Kill([&](const EVENT &nItem)->bool { \
-            bool const bKill = (match); \
-            if (bKill && pCount && *pCount) --*pCount; \
-            return bKill; }); \
-        gEvKillTicks += PS3_ProfClock() - ps3K0; \
-    } while (0)
+// NBlood-PS3: for the slow frames' "[slow events]" lines (evProcess): what
+// the kills walked and took, what evSend handed out
+static unsigned gEvKills, gEvSends, gEvSendMsgs;
+static unsigned long long gEvKillWalked, gEvKillTicks;
+
+struct Ps3KillTimer
+{
+    unsigned long long const t0;
+    explicit Ps3KillTimer(unsigned queued) : t0(PS3_ProfClock()) { gEvKills++; gEvKillWalked += queued; }
+    ~Ps3KillTimer() { gEvKillTicks += PS3_ProfClock() - t0; }
+};
+# define PS3_KILL_TIMER() Ps3KillTimer const ps3KillTimer(PQueue->Size())
 #else
-# define EV_KILL(a1, a2, match) PQueue->Kill([=](const EVENT &nItem)->bool { return (match); })
+# define PS3_KILL_TIMER() do { } while (0)
 #endif
 
 void EventQueue::Kill(int a1, int a2)
 {
-    EV_KILL(a1, a2, nItem.index == a1 && nItem.type == a2);
+    PS3_KILL_TIMER();
+    PQueue->Kill([=](const EVENT &nItem)->bool {return (nItem.index == a1 && nItem.type == a2); });
 }
 
 void EventQueue::Kill(int idx, int type, int causer)
 {
-    EV_KILL(idx, type, nItem.index == idx && nItem.type == type && nItem.causer == causer);
+    PS3_KILL_TIMER();
+    PQueue->Kill([=](const EVENT &nItem)->bool { return (nItem.index == idx && nItem.type == type && nItem.causer == causer); });
 }
 
 void EventQueue::Kill(int a1, int a2, CALLBACK_ID a3)
 {
-    EV_KILL(a1, a2, nItem.index == a1 && nItem.type == a2 && nItem.cmd == kCmdCallback && nItem.funcID == (unsigned int)a3);
+    PS3_KILL_TIMER();
+    PQueue->Kill([=](const EVENT &nItem)->bool {return (nItem.index == a1 && nItem.type == a2 && nItem.cmd == kCmdCallback && nItem.funcID == (unsigned int)a3); });
 }
 
 RXBUCKET rxBucket[kChannelMax+1];
@@ -329,7 +288,7 @@ void evInit(void)
         eventQ.PQueue = new VanillaPriorityQueue<EVENT>();
     else
         eventQ.PQueue = new StdPriorityQueue<EVENT>();
-    eventQ.Clear();
+    eventQ.PQueue->Clear();
     int nCount = 0;
     for (int i = 0; i < numsectors; i++)
     {
@@ -603,7 +562,7 @@ void evPost(int nIndex, int nType, unsigned int nDelta, COMMAND_ID command, int 
         evn.causer = kCauserGame;
     #endif
 
-    eventQ.Insert((int)gFrameClock+nDelta, evn);
+    eventQ.PQueue->Insert((int)gFrameClock+nDelta, evn);
 }
 
 void evPost(int nIndex, int nType, unsigned int nDelta, CALLBACK_ID callback) {
@@ -613,18 +572,18 @@ void evPost(int nIndex, int nType, unsigned int nDelta, CALLBACK_ID callback) {
     evn.cmd = kCmdCallback;
     evn.funcID = callback;
     evn.causer = kCauserGame;
-    eventQ.Insert((int)gFrameClock+nDelta, evn);
+    eventQ.PQueue->Insert((int)gFrameClock+nDelta, evn);
 }
 
 #ifdef __PPU__
 extern "C" void PS3_Log(const char *fmt, ...);
-extern unsigned long long ps3_sfxTicks;   // sfx.cpp: the sound starts
+extern unsigned long long ps3_sfxTicks;   // sfx.cpp, sound.cpp: the sound starts
 extern unsigned ps3_sfxCalls;
 
 struct Ps3SlowEv { double ms; int type, cmd, index, func; };
 
-// one event's object, for the log: a sector's type and channels, a
-// sprite's or wall's type
+// one event's object, for the log: a sector's, sprite's or wall's type
+// and channels
 static void Ps3EvDescribe(char *buf, size_t size, Ps3SlowEv const &e)
 {
     if (e.cmd == kCmdCallback)
@@ -632,8 +591,8 @@ static void Ps3EvDescribe(char *buf, size_t size, Ps3SlowEv const &e)
     else if (e.type == 6 && e.index >= 0 && e.index < numsectors)
     {
         int const nX = sector[e.index].extra;
-        snprintf(buf, size, "sector %d (type %d, rx %d tx %d, shade %d) cmd %d", e.index, (int)sector[e.index].type,
-                 nX > 0 ? (int)xsector[nX].rxID : -1, nX > 0 ? (int)xsector[nX].txID : -1, (int)sector[e.index].floorshade, e.cmd);
+        snprintf(buf, size, "sector %d (type %d, rx %d tx %d) cmd %d", e.index, (int)sector[e.index].type,
+                 nX > 0 ? (int)xsector[nX].rxID : -1, nX > 0 ? (int)xsector[nX].txID : -1, e.cmd);
     }
     else if (e.type == 3 && e.index >= 0 && e.index < kMaxSprites)
     {
@@ -653,7 +612,7 @@ void evProcess(unsigned int nTime)
 #ifdef __PPU__
     unsigned long long const ps3All0 = PS3_ProfClock();
     unsigned const ps3Queued0 = eventQ.PQueue->Size();
-    unsigned const ps3Kills0 = gEvKills, ps3Skipped0 = gEvKillsSkipped, ps3Sends0 = gEvSends, ps3Msgs0 = gEvSendMsgs;
+    unsigned const ps3Kills0 = gEvKills, ps3Sends0 = gEvSends, ps3Msgs0 = gEvSendMsgs;
     unsigned long long const ps3Walked0 = gEvKillWalked, ps3KillT0 = gEvKillTicks, ps3SfxT0 = ps3_sfxTicks;
     unsigned const ps3SfxN0 = ps3_sfxCalls;
     unsigned ps3Events = 0, ps3ByType[4] = {};   // sector, wall, sprite, callback
@@ -723,11 +682,11 @@ void evProcess(unsigned int nTime)
     if (ps3AllMs > 20.0)
     {
         PS3_Log("[slow events] %.1f ms: %u events (sectors %u, walls %u, sprites %u, callbacks %u), queue %u -> %u; "
-                "%u sends to %u objects; %u kills, %u skipped, %llu queued events walked in %.1f ms; %u sound starts in %.1f ms",
+                "%u sends to %u objects; %u kills walked %llu queued events in %.1f ms; %u sound starts in %.1f ms",
                 ps3AllMs, ps3Events, ps3ByType[0], ps3ByType[1], ps3ByType[2], ps3ByType[3], ps3Queued0,
                 (unsigned)eventQ.PQueue->Size(), gEvSends - ps3Sends0, gEvSendMsgs - ps3Msgs0,
-                gEvKills - ps3Kills0, gEvKillsSkipped - ps3Skipped0, gEvKillWalked - ps3Walked0,
-                PS3_ProfClockMs(gEvKillTicks - ps3KillT0), ps3_sfxCalls - ps3SfxN0, PS3_ProfClockMs(ps3_sfxTicks - ps3SfxT0));
+                gEvKills - ps3Kills0, gEvKillWalked - ps3Walked0, PS3_ProfClockMs(gEvKillTicks - ps3KillT0),
+                ps3_sfxCalls - ps3SfxN0, PS3_ProfClockMs(ps3_sfxTicks - ps3SfxT0));
 
         for (int k = 0; k < 3 && ps3Top[k].ms > 0.0; k++)
         {
@@ -775,7 +734,6 @@ void EventQLoadSave::Load()
         eventQ.PQueue = new VanillaPriorityQueue<EVENT>();
     else
         eventQ.PQueue = new StdPriorityQueue<EVENT>();
-    eventQ.Clear();
     int nEvents;
     Read(&nEvents, sizeof(nEvents));
     for (int i = 0; i < nEvents; i++)
@@ -784,7 +742,7 @@ void EventQLoadSave::Load()
         unsigned int eventtime;
         Read(&eventtime, sizeof(eventtime));
         Read(&event, sizeof(event));
-        eventQ.Insert(eventtime, event);
+        eventQ.PQueue->Insert(eventtime, event);
     }
     Read(rxBucket, sizeof(rxBucket));
     Read(bucketHead, sizeof(bucketHead));
@@ -814,7 +772,7 @@ void EventQLoadSave::Save()
     dassert(eventQ.PQueue->Size() == 0);
     for (uint32_t i = 0; i < nEvents; i++)
     {
-        eventQ.Insert(events[i].evTime, events[i].event);
+        eventQ.PQueue->Insert(events[i].evTime, events[i].event);
     }
     Write(rxBucket, sizeof(rxBucket));
     Write(bucketHead, sizeof(bucketHead));

@@ -24,6 +24,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#ifdef __PPU__
+#include <string>
+#include <unordered_set>
+#endif
 #include "crc32.h"
 #include "compat.h"
 #include "cache1d.h"
@@ -703,6 +707,23 @@ void Resource::Free(void *p)
 #endif
 }
 
+#ifdef __PPU__
+// NBlood-PS3: Lookup by name looked for an external NAME.TYPE file on
+// every call, a failed open in each search directory: some ms on the PS3's
+// disk, for every sound started (85 thunder sounds on a lightning strike
+// in E4M1: 300 ms). Each name is looked for once per Resource: the files
+// don't change while the game runs.
+static bool Ps3ExternalChecked(void const *pRes, const char *name, const char *type)
+{
+    static std::unordered_set<std::string> checked;
+    char key[BMAX_PATH * 2 + 24];
+
+    Bsnprintf(key, sizeof(key), "%p/%s.%s", pRes, name, type);
+    Bstrupr(key);
+    return !checked.insert(key).second;
+}
+#endif
+
 DICTNODE *Resource::Lookup(const char *name, const char *type)
 {
     char name2[BMAX_PATH], type2[BMAX_PATH];
@@ -710,6 +731,9 @@ DICTNODE *Resource::Lookup(const char *name, const char *type)
     dassert(type != NULL);
     //if (strlen(name) > 8 || strlen(type) > 3) return NULL;
     // Try to load external resource first
+#ifdef __PPU__
+    if (!Ps3ExternalChecked(this, name, type))
+#endif
     AddExternalResource(name, type);
     strcpy(name2, name);
     strcpy(type2, type);
