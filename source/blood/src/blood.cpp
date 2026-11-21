@@ -1704,6 +1704,7 @@ static void PS3_VramTest(void)
 {
     int maps = 0, shortMaps = 0;
 
+    int const ps3SavedFilter = gltexfiltermode;   // given back before the config is written
     gltexfiltermode = 5;
     gltexapplyprops();
     PS3_Log("[vramtest] Blood: every map with texture filter 5 (trilinear)");
@@ -1736,6 +1737,9 @@ static void PS3_VramTest(void)
         }
 
     PS3_Log("[vramtest] done: %d maps, %d with textures that didn't fit; back to the XMB", maps, shortMaps);
+    // the player's filter, not the test's, goes into the config
+    gltexfiltermode = ps3SavedFilter;
+    gltexapplyprops();
     PS3_GameQuit();
     PS3_Exit(0);
 }
