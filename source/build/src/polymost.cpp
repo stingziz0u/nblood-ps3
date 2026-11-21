@@ -689,6 +689,12 @@ int polymost_ps3_vramMeasure(char const *name, uint32_t *keys, int numKeys)
     int tiles = 0, lastTile = -1, pals = 0;
     uint8_t palSeen[256] = {};
 
+    // the indexed tilesheets go with the first RGBA texture: before the
+    // count, or what they give back comes off it (PowerSlave's first map
+    // read 4077 MB, a negative number)
+    if (!ps3SheetsGone && ps3NumTilesheets && !polymost_useindexedtextures())
+        polymost_ps3_dropIndexed();
+
     PS3GL_TexStats(&before, NULL, NULL, 1);
 
     for (int i = 0; i < numKeys; i++)
