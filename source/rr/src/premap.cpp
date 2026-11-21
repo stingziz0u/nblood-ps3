@@ -26,6 +26,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "demo.h"
 #include "savegame.h"
 #include "cmdline.h"
+#ifdef __PPU__
+#include <algorithm>
+#include <vector>
+#include "texcache.h"
+#endif
 
 static int32_t g_whichPalForPlayer = 9;
 
@@ -33,8 +38,24 @@ static uint8_t precachehightile[2][MAXTILES>>3];
 static int32_t g_precacheCount;
 
 
+#ifdef __PPU__
+// NBlood-PS3: the video memory test (USRDIR/autotest.txt, G_PS3_VramTest
+// in game.cpp): every tile the map caches, with the palette it's seen in
+// (the wall's, floor's, ceiling's or sprite's), loaded as a texture
+extern int ps3_autotest;
+static int32_t g_ps3CachePal;
+static std::vector<uint32_t> g_ps3CacheList;   // tile << 9 | pal << 1 | type
+# define PS3_CACHEPAL(p) (g_ps3CachePal = (p))
+#else
+# define PS3_CACHEPAL(p) ((void)0)
+#endif
+
 static void flag_precache(int32_t tile, int32_t type)
 {
+#ifdef __PPU__
+    if (ps3_autotest && (unsigned)tile < MAXTILES)
+        g_ps3CacheList.push_back(((uint32_t)tile << 9) | ((uint32_t)(g_ps3CachePal & 255) << 1) | (type & 1));
+#endif
     if (!(gotpic[tile>>3] & pow2char[tile&7]))
         g_precacheCount++;
     gotpic[tile>>3] |= pow2char[tile&7];
@@ -579,11 +600,17 @@ void G_CacheMapData(void)
 
     starttime = timerGetTicks();
 
+#ifdef __PPU__
+    g_ps3CacheList.clear();
+#endif
+
     S_PrecacheSounds();
+    PS3_CACHEPAL(0);
     G_PrecacheSprites();
 
     for (i=0; i<numwalls; i++)
     {
+        PS3_CACHEPAL(wall[i].pal);
         tloadtile(wall[i].picnum, 0);
 
         if (wall[i].overpicnum >= 0)
@@ -594,7 +621,9 @@ void G_CacheMapData(void)
 
     for (i=0; i<numsectors; i++)
     {
+        PS3_CACHEPAL(sector[i].floorpal);
         tloadtile(sector[i].floorpicnum, 0);
+        PS3_CACHEPAL(sector[i].ceilingpal);
         tloadtile(sector[i].ceilingpicnum, 0);
         if (sector[i].ceilingpicnum == LA)  // JBF 20040509: if( waloff[sector[i].ceilingpicnum] == LA) WTF?!?!?!?
         {
@@ -604,7 +633,10 @@ void G_CacheMapData(void)
 
         for (SPRITES_OF_SECT(i, j))
             if (sprite[j].xrepeat != 0 && sprite[j].yrepeat != 0 && (sprite[j].cstat&32768) == 0)
+            {
+                PS3_CACHEPAL(sprite[j].pal);
                 G_CacheSpriteNum(j);
+            }
     }
 
     tc = (int32_t) totalclock;
@@ -702,6 +734,66 @@ void G_CacheMapData(void)
     endtime = timerGetTicks();
     OSD_Printf("Cache time: %dms\n", endtime-starttime);
 }
+
+#ifdef __PPU__
+extern "C" {
+void PS3_Log(const char *fmt, ...);
+void PS3GL_TexStats(uint32_t *bytes, uint32_t *fails, uint32_t *fail_bytes, int reset);
+uint32_t PS3GL_ProbeFreeRSX(uint32_t *largest);
+}
+void polymost_ps3_dropRGBA(void);   // build/src/polymost.cpp
+
+// The video memory test, for the map just entered: what it caches made
+// into textures, as drawing it would (with the texture filter on: an RGBA
+// texture for each tile and palette, the sprites' clamped). What they
+// take, what didn't fit, what the RSX has left. 1: something didn't fit.
+int G_PS3_VramMeasure(char const *name)
+{
+    std::vector<uint32_t> &list = g_ps3CacheList;
+
+    std::sort(list.begin(), list.end());
+    list.erase(std::unique(list.begin(), list.end()), list.end());
+
+    uint32_t before, after, fails, failBytes, largest;
+    int tiles = 0, lastTile = -1, pals = 0;
+    uint8_t palSeen[256] = {};
+
+    PS3GL_TexStats(&before, NULL, NULL, 1);
+
+    for (uint32_t const key : list)
+    {
+        int const tile = key >> 9, pal = (key >> 1) & 255, type = key & 1;
+
+        if (tilesiz[tile].x <= 0 || tilesiz[tile].y <= 0 || (pal < MAXPALOOKUPS - RESERVEDPALS && palookup[pal] == NULL))
+            continue;
+
+        if (waloff[tile] == 0)
+            tileLoad((int16_t)tile);
+
+        texcache_fetch(tile, pal, 0, type ? (DAMETH_CLAMPED|DAMETH_MASK) : 0);
+
+        if (tile != lastTile)
+            tiles++, lastTile = tile;
+        if (!palSeen[pal])
+            palSeen[pal] = 1, pals++;
+    }
+
+    PS3GL_TexStats(&after, &fails, &failBytes, 1);
+
+    uint32_t const freeBytes = PS3GL_ProbeFreeRSX(&largest);
+
+    PS3_Log("[vramtest] %s: %d tiles in %d palettes, %d textures: %.1f MB (all textures %.1f MB); "
+            "RSX free %.1f MB (largest block %.1f MB); %s",
+            name, tiles, pals, (int)list.size(), (after - before) / 1048576.0, after / 1048576.0,
+            freeBytes / 1048576.0, largest / 1048576.0, fails ? "" : "everything fit");
+
+    if (fails)
+        PS3_Log("[vramtest]   SHORT: %u textures didn't fit, %.1f MB more needed", fails, failBytes / 1048576.0);
+
+    list.clear();
+    return fails != 0;
+}
+#endif
 
 extern int32_t fragbarheight(void)
 {
@@ -2589,6 +2681,13 @@ int G_EnterLevel(int gameMode)
     ud.playerbest = CONFIG_GetMapBestTime(Menu_HaveUserMap() ? boardfilename : g_mapInfo[mii].filename, g_loadedMapHack.md4);
 
     // G_FadeLoad(0,0,0, 252,0, -28, 4, -1);
+#ifdef __PPU__
+    // NBlood-PS3: with a texture filter on, the RGBA textures of the maps
+    // before stayed and added up until the video memory ran out: a new
+    // map starts without them (they're made again as they're drawn)
+    if (gltexfiltermode != 0)
+        polymost_ps3_dropRGBA();
+#endif
     G_CacheMapData();
     // G_FadeLoad(0,0,0, 0,252, 28, 4, -2);
 

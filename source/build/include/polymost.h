@@ -154,6 +154,14 @@ static FORCE_INLINE int polymost_useindexedtextures(void)
 static FORCE_INLINE int polymost_usetileshades(void)
 {
     int const idx = polymost_useindexedtextures();
+#ifdef __PS3__
+    // NBlood-PS3: with a texture filter on (RGBA textures, no shade
+    // table in the shader) a tile's shades would be baked in: one texture
+    // for every tile, palette and shade, the video memory gone. Shaded by
+    // the color instead (one texture per tile and palette).
+    if (!idx)
+        return TS_NONE;
+#endif
     int const shd = idx || (r_usetileshades && !(globalflags & GLOBAL_NO_GL_TILESHADES));
     return idx && shd ? TS_SHADETABLE : shd ? TS_TEXTURE : TS_NONE;
 }

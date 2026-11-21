@@ -1498,7 +1498,9 @@ void videoShowFrame(int32_t w)
         // next to the indexed tilesheets, and Redneck Rampage's art
         // doesn't fit (Rides Again: textures in white). Back to no filter
         // (the indexed textures, a byte a texel), the RGBA ones freed.
-        if (PS3GL_TakeOutOfMemory() && gltexfiltermode != 0)
+        extern int ps3_autotest;   // the video memory test counts, the filter stays
+
+        if (PS3GL_TakeOutOfMemory() && gltexfiltermode != 0 && !ps3_autotest)
         {
             PS3_Log("[gl] out of RSX memory with texture filter %d: back to none", (int)gltexfiltermode);
             gltexfiltermode = 0;

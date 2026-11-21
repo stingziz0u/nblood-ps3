@@ -6431,6 +6431,61 @@ static void G_PS3_Rumble(void)
 }
 #endif
 
+#ifdef __PPU__
+// The video memory test (USRDIR/autotest.txt with logs.txt): every map of
+// every episode entered in turn with the texture filter on (trilinear,
+// mipmaps: the most memory), what each caches made into textures
+// (G_PS3_VramMeasure, premap.cpp), "[vramtest]" lines in the log, then
+// quit. A texture that doesn't fit is counted, nothing turns off.
+extern int ps3_autotest;
+extern "C" void PS3_Log(const char *fmt, ...);
+extern "C" int PS3_ExitRequested(void);
+extern "C" void PS3_Exit(int code) __attribute__((noreturn));
+extern "C" void PS3_GameQuit(void);
+int G_PS3_VramMeasure(char const *name);
+
+static void G_PS3_VramTest(void)
+{
+    int maps = 0, shortMaps = 0;
+
+    gltexfiltermode = 5;
+    gltexapplyprops();
+    PS3_Log("[vramtest] %s: every map with texture filter 5 (trilinear)", RRRA ? "Rides Again" : "Redneck Rampage");
+
+    for (int v = 0; v < MAXVOLUMES && !PS3_ExitRequested(); v++)
+        for (int l = 0; l < MAXLEVELS && !PS3_ExitRequested(); l++)
+        {
+            map_t const &map = g_mapInfo[v * MAXLEVELS + l];
+
+            if (!map.filename)
+                continue;
+
+            char name[96];
+            Bsnprintf(name, sizeof(name), "E%dL%d %s", v + 1, l + 1, map.filename);
+
+            g_turdLevel = 0;
+            ud.m_volume_number = v;
+            ud.m_level_number = l;
+            ud.m_player_skill = 4;
+            ud.m_monsters_off = 0;
+            G_NewGame(v, l, 4);
+
+            if (G_EnterLevel(MODE_GAME))
+            {
+                PS3_Log("[vramtest] %s: didn't load", name);
+                continue;
+            }
+
+            maps++;
+            shortMaps += G_PS3_VramMeasure(name);
+        }
+
+    PS3_Log("[vramtest] done: %d maps, %d with textures that didn't fit", maps, shortMaps);
+    PS3_GameQuit();
+    PS3_Exit(0);
+}
+#endif
+
 #ifdef PS3_DEBUG_CHEATS
 // PS3 debug build (make -C ps3 GAME=rr DEBUG=1), for testing: always god
 // mode; every weapon (RDALL's) when the player starts, ammo kept full; all
@@ -8788,6 +8843,11 @@ int app_main(int argc, char const * const * argv)
         ghtrophy_loadbestscores();
 
     //    getpackets();
+
+#ifdef __PPU__
+    if (ps3_autotest)
+        G_PS3_VramTest();
+#endif
 
 MAIN_LOOP_RESTART:
     totalclock = 0;

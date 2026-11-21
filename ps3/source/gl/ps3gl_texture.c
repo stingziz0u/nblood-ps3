@@ -268,6 +268,10 @@ Bound(void)
    turns the texture filter off: NBlood-PS3 patch 32) */
 static int ps3gl_oom;
 
+/* the textures that didn't fit, since the last PS3GL_TexStats(..., 1)
+   (the video memory test, NBlood-PS3 patch 41) */
+static uint32_t tex_fails, tex_fail_bytes;
+
 int
 PS3GL_TakeOutOfMemory(void)
 {
@@ -275,6 +279,70 @@ PS3GL_TakeOutOfMemory(void)
 
 	ps3gl_oom = 0;
 	return r;
+}
+
+/* the RSX memory the textures have, and the ones that didn't get any */
+void
+PS3GL_TexStats(uint32_t *bytes, uint32_t *fails, uint32_t *fail_bytes, int reset)
+{
+	if (bytes)
+		*bytes = ps3gl.st_tex_bytes;
+	if (fails)
+		*fails = tex_fails;
+	if (fail_bytes)
+		*fail_bytes = tex_fail_bytes;
+
+	if (reset)
+		tex_fails = tex_fail_bytes = 0;
+}
+
+/* What the RSX's heap has free, in bytes: the largest block, and all of
+   it (taken in blocks as big as they come, then given back). Slow: for
+   the test. */
+uint32_t
+PS3GL_ProbeFreeRSX(uint32_t *largest)
+{
+	enum { MAXBLOCKS = 4096, MINBLOCK = 64 << 10 };
+	static void *blocks[MAXBLOCKS];
+	uint32_t lo = 0, hi = 256u << 20, total = 0, size;
+	int n = 0, i;
+
+	/* the largest block: halving */
+	while (hi - lo > MINBLOCK)
+	{
+		uint32_t const mid = lo + ((hi - lo) / 2 & ~(MINBLOCK - 1u));
+		void *const p = rsxMemalign(128, mid);
+
+		if (p)
+		{
+			rsxFree(p);
+			lo = mid;
+		}
+		else
+			hi = mid;
+	}
+
+	if (largest)
+		*largest = lo;
+
+	/* all of it */
+	for (size = lo ? lo : MINBLOCK; size >= MINBLOCK && n < MAXBLOCKS;)
+	{
+		void *const p = rsxMemalign(128, size);
+
+		if (p)
+		{
+			blocks[n++] = p;
+			total += size;
+		}
+		else
+			size /= 2;
+	}
+
+	for (i = 0; i < n; i++)
+		rsxFree(blocks[i]);
+
+	return total;
 }
 
 static int
@@ -767,6 +835,8 @@ TexImage2D(GLenum target, GLint level, GLint internalFormat, GLsizei width,
 				static int warned;
 
 				ps3gl_oom = 1;
+				tex_fails++;
+				tex_fail_bytes += size;
 
 				if (!warned)
 				{
