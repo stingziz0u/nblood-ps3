@@ -102,8 +102,26 @@ void Calc3DValues(BONKLE *pBonkle)
     rPhase = phaseLeft - phaseMin;
 }
 
+#ifdef __PPU__
+// NBlood-PS3: the time in sound starts, for the "[slow events]" lines
+// (eventq.cpp)
+unsigned long long ps3_sfxTicks;
+unsigned ps3_sfxCalls;
+
+struct Ps3SfxTimer
+{
+    unsigned long long const t0;
+    Ps3SfxTimer() : t0(PS3_ProfClock()) {}
+    ~Ps3SfxTimer() { ps3_sfxTicks += PS3_ProfClock() - t0; ps3_sfxCalls++; }
+};
+# define PS3_SFX_TIMER() Ps3SfxTimer const ps3SfxTimer
+#else
+# define PS3_SFX_TIMER() do { } while (0)
+#endif
+
 void sfxPlay3DSound(int x, int y, int z, int soundId, int nSector)
 {
+    PS3_SFX_TIMER();
     if (!SoundToggle || soundId < 0) return;
     
     DICTNODE *hRes = gSoundRes.Lookup(soundId, "SFX");
@@ -154,6 +172,7 @@ void sfxPlay3DSound(int x, int y, int z, int soundId, int nSector)
 
 void sfxPlay3DSound(spritetype *pSprite, int soundId, int chanId, int nFlags)
 {
+    PS3_SFX_TIMER();
     if (!SoundToggle)
         return;
     if (!pSprite)
@@ -268,6 +287,7 @@ void sfxPlay3DSound(spritetype *pSprite, int soundId, int chanId, int nFlags)
 // by NoOne: same as previous, but allows to set custom pitch for sound AND volume.
 void sfxPlay3DSoundCP(spritetype* pSprite, int soundId, int chanId, int nFlags, int pitch, int volume)
 {
+    PS3_SFX_TIMER();
     if (!SoundToggle || !pSprite || soundId < 0) return;
     DICTNODE* hRes = gSoundRes.Lookup(soundId, "SFX");
     if (!hRes) return;

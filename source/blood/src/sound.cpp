@@ -266,8 +266,24 @@ void SoundCallback(intptr_t val)
 
 void sndKillSound(SAMPLE2D *pChannel);
 
+#ifdef __PPU__
+// NBlood-PS3: counted with the 3D ones (sfx.cpp)
+extern unsigned long long ps3_sfxTicks;
+extern unsigned ps3_sfxCalls;
+struct Ps3SndTimer
+{
+    unsigned long long const t0;
+    Ps3SndTimer() : t0(PS3_ProfClock()) {}
+    ~Ps3SndTimer() { ps3_sfxTicks += PS3_ProfClock() - t0; ps3_sfxCalls++; }
+};
+# define PS3_SND_TIMER() Ps3SndTimer const ps3SndTimer
+#else
+# define PS3_SND_TIMER() do { } while (0)
+#endif
+
 void sndStartSample(const char *pzSound, int nVolume, int nChannel)
 {
+    PS3_SND_TIMER();
     if (!SoundToggle)
         return;
     if (!strlen(pzSound))
@@ -290,6 +306,7 @@ void sndStartSample(const char *pzSound, int nVolume, int nChannel)
 
 void sndStartSample(unsigned int nSound, int nVolume, int nChannel, bool bLoop)
 {
+    PS3_SND_TIMER();
     if (!SoundToggle)
         return;
     dassert(nChannel >= -1 && nChannel < kChannelMax);

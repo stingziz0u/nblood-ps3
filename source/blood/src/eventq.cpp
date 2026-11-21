@@ -47,6 +47,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 // EventQueue object, which the saves write as raw bytes.
 static uint32_t gEvCount[8][16384];
 static unsigned gEvKills, gEvKillsSkipped;
+// for the slow frames' "[slow events]" lines: what the kills walked and
+// took, what evSend handed out
+static unsigned long long gEvKillWalked, gEvKillTicks;
+static unsigned gEvSends, gEvSendMsgs;
 
 static inline uint32_t *EvCount(int nIndex, int nType)
 {
@@ -105,10 +109,13 @@ EventQueue eventQ;
         uint32_t *const pCount = EvCount(a1, a2); \
         gEvKills++; \
         if (pCount && !*pCount) { gEvKillsSkipped++; break; } \
+        unsigned long long const ps3K0 = PS3_ProfClock(); \
+        gEvKillWalked += PQueue->Size(); \
         PQueue->Kill([&](const EVENT &nItem)->bool { \
             bool const bKill = (match); \
             if (bKill && pCount && *pCount) --*pCount; \
             return bKill; }); \
+        gEvKillTicks += PS3_ProfClock() - ps3K0; \
     } while (0)
 #else
 # define EV_KILL(a1, a2, match) PQueue->Kill([=](const EVENT &nItem)->bool { return (match); })
@@ -549,6 +556,10 @@ void evSend(int nIndex, int nType, int rxId, COMMAND_ID command, int causerID)
     }
     #endif
 
+#ifdef __PPU__
+    gEvSends++;
+    gEvSendMsgs += bucketHead[rxId+1] - bucketHead[rxId];
+#endif
     for (int i = bucketHead[rxId]; i < bucketHead[rxId+1]; i++) {
         if (event.type != rxBucket[i].type || event.index != rxBucket[i].index) {
             switch (rxBucket[i].type) {
@@ -607,10 +618,47 @@ void evPost(int nIndex, int nType, unsigned int nDelta, CALLBACK_ID callback) {
 
 #ifdef __PPU__
 extern "C" void PS3_Log(const char *fmt, ...);
+extern unsigned long long ps3_sfxTicks;   // sfx.cpp: the sound starts
+extern unsigned ps3_sfxCalls;
+
+struct Ps3SlowEv { double ms; int type, cmd, index, func; };
+
+// one event's object, for the log: a sector's type and channels, a
+// sprite's or wall's type
+static void Ps3EvDescribe(char *buf, size_t size, Ps3SlowEv const &e)
+{
+    if (e.cmd == kCmdCallback)
+        snprintf(buf, size, "callback %d on %s %d", e.func, e.type == 6 ? "sector" : e.type == 0 ? "wall" : "sprite", e.index);
+    else if (e.type == 6 && e.index >= 0 && e.index < numsectors)
+    {
+        int const nX = sector[e.index].extra;
+        snprintf(buf, size, "sector %d (type %d, rx %d tx %d, shade %d) cmd %d", e.index, (int)sector[e.index].type,
+                 nX > 0 ? (int)xsector[nX].rxID : -1, nX > 0 ? (int)xsector[nX].txID : -1, (int)sector[e.index].floorshade, e.cmd);
+    }
+    else if (e.type == 3 && e.index >= 0 && e.index < kMaxSprites)
+    {
+        int const nX = sprite[e.index].extra;
+        snprintf(buf, size, "sprite %d (type %d, rx %d tx %d) cmd %d", e.index, (int)sprite[e.index].type,
+                 nX > 0 ? (int)xsprite[nX].rxID : -1, nX > 0 ? (int)xsprite[nX].txID : -1, e.cmd);
+    }
+    else if (e.type == 0 && e.index >= 0 && e.index < numwalls)
+        snprintf(buf, size, "wall %d (type %d) cmd %d", e.index, (int)wall[e.index].type, e.cmd);
+    else
+        snprintf(buf, size, "type %d index %d cmd %d", e.type, e.index, e.cmd);
+}
 #endif
 
 void evProcess(unsigned int nTime)
 {
+#ifdef __PPU__
+    unsigned long long const ps3All0 = PS3_ProfClock();
+    unsigned const ps3Queued0 = eventQ.PQueue->Size();
+    unsigned const ps3Kills0 = gEvKills, ps3Skipped0 = gEvKillsSkipped, ps3Sends0 = gEvSends, ps3Msgs0 = gEvSendMsgs;
+    unsigned long long const ps3Walked0 = gEvKillWalked, ps3KillT0 = gEvKillTicks, ps3SfxT0 = ps3_sfxTicks;
+    unsigned const ps3SfxN0 = ps3_sfxCalls;
+    unsigned ps3Events = 0, ps3ByType[4] = {};   // sector, wall, sprite, callback
+    Ps3SlowEv ps3Top[3] = {};
+#endif
 #if 0
     while (1)
     {
@@ -628,7 +676,6 @@ void evProcess(unsigned int nTime)
         EVENT event = eventQ.ERemove();
 #ifdef __PPU__
         unsigned long long const ps3T0 = PS3_ProfClock();
-        unsigned const ps3Kills0 = gEvKills, ps3Skipped0 = gEvKillsSkipped;
 #endif
         if (event.cmd == kCmdCallback)
         {
@@ -652,14 +699,44 @@ void evProcess(unsigned int nTime)
             }
         }
 #ifdef __PPU__
-        // still slow: the log says which one
-        double const ps3Ms = PS3_ProfClockMs(PS3_ProfClock() - ps3T0);
-        if (ps3Ms > 20.0)
-            PS3_Log("[slow event] %.1f ms: cmd %d type %d index %d callback %d; %u kills (%u with nothing queued), %u events queued",
-                    ps3Ms, (int)event.cmd, (int)event.type, (int)event.index, (int)event.funcID,
-                    gEvKills - ps3Kills0, gEvKillsSkipped - ps3Skipped0, (unsigned)eventQ.PQueue->Size());
+        {
+            double const ms = PS3_ProfClockMs(PS3_ProfClock() - ps3T0);
+            Ps3SlowEv const e = { ms, (int)event.type, (int)event.cmd, (int)event.index, (int)event.funcID };
+
+            ps3Events++;
+            ps3ByType[event.cmd == kCmdCallback ? 3 : event.type == 6 ? 0 : event.type == 0 ? 1 : 2]++;
+
+            for (int k = 0; k < 3; k++)
+                if (ms > ps3Top[k].ms)
+                {
+                    for (int m = 2; m > k; m--)
+                        ps3Top[m] = ps3Top[m-1];
+                    ps3Top[k] = e;
+                    break;
+                }
+        }
 #endif
     }
+#ifdef __PPU__
+    // a slow evProcess (the "events" of the hitch lines): what it did
+    double const ps3AllMs = PS3_ProfClockMs(PS3_ProfClock() - ps3All0);
+    if (ps3AllMs > 20.0)
+    {
+        PS3_Log("[slow events] %.1f ms: %u events (sectors %u, walls %u, sprites %u, callbacks %u), queue %u -> %u; "
+                "%u sends to %u objects; %u kills, %u skipped, %llu queued events walked in %.1f ms; %u sound starts in %.1f ms",
+                ps3AllMs, ps3Events, ps3ByType[0], ps3ByType[1], ps3ByType[2], ps3ByType[3], ps3Queued0,
+                (unsigned)eventQ.PQueue->Size(), gEvSends - ps3Sends0, gEvSendMsgs - ps3Msgs0,
+                gEvKills - ps3Kills0, gEvKillsSkipped - ps3Skipped0, gEvKillWalked - ps3Walked0,
+                PS3_ProfClockMs(gEvKillTicks - ps3KillT0), ps3_sfxCalls - ps3SfxN0, PS3_ProfClockMs(ps3_sfxTicks - ps3SfxT0));
+
+        for (int k = 0; k < 3 && ps3Top[k].ms > 0.0; k++)
+        {
+            char what[128];
+            Ps3EvDescribe(what, sizeof(what), ps3Top[k]);
+            PS3_Log("[slow events]   %.1f ms: %s", ps3Top[k].ms, what);
+        }
+    }
+#endif
 }
 
 void evKill(int a1, int a2)
