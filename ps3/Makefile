@@ -5,7 +5,7 @@
 #
 #   make -C ps3            -> ps3/nblood-ps3-<version>.pkg (Blood)
 #   make -C ps3 GAME=rr    -> ps3/redneck-ps3-<version>.pkg (Redneck Rampage)
-#   make -C ps3 GAME=rrra  -> ps3/redneckra-ps3-<version>.pkg (Rides Again)
+#   make -C ps3 GAME=rrra  -> ps3/redneckridesagain-ps3-<version>.pkg (Rides Again)
 #   make -C ps3 GAME=exhumed -> ps3/ps3xhumed-<version>.pkg (PowerSlave)
 #   make -C ps3 clean
 #   make -C ps3 verify     -> patch level of the tree and of the PKG
@@ -80,7 +80,7 @@ TITLE      := Redneck Rampage
 APPID      := REDNECKRM
 GAME_SRC   := rr
 else ifeq ($(GAME),rrra)
-TARGET     := redneckra-ps3
+TARGET     := redneckridesagain-ps3
 TITLE      := Redneck Rampage Rides Again
 APPID      := REDNECKRA
 GAME_SRC   := rr
